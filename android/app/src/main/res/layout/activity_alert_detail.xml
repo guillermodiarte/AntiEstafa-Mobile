@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Encabezado de Peligro -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/ic_shield"
+            android:backgroundTint="@color/shield_danger_bg"
+            android:padding="24dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:id="@+id/tvAlertBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔴 RIESGO ALTO DETECTADO"
+                android:textColor="@color/shield_danger"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:letterSpacing="0.05"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvAlertTarget"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="+54 9 11 3890-1234"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:textSize="24sp"
+                android:gravity="center" />
+        </LinearLayout>
+
+        <!-- Bloque 1: ¿Qué detectamos? -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/border_card"
+            app:strokeWidth="1dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1. ¿QUÉ DETECTÓ EL ESCUDO?"
+                    android:textColor="@color/shield_danger"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvWhatDetected"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Modalidad: Falso Familiar / Solicitud urgente de dinero."
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Bloque 2: ¿Por qué es peligroso? -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/border_card"
+            app:strokeWidth="1dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2. ¿POR QUÉ IMPORTA?"
+                    android:textColor="@color/shield_warning"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvWhyDanger"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="El número o enlace coincide con reportes de personas que sufrieron intentos de engaño y robo de cuentas."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="16sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Bloque 3: ¿Qué hacer ahora? -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/shield_active"
+            app:strokeWidth="1dp"
+            android:layout_marginBottom="28dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="3. ¿QUÉ HACER AHORA?"
+                    android:textColor="@color/shield_active"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvWhatToDo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="• No transfieras dinero.\n• No des claves ni códigos de 6 dígitos.\n• Llamá a tu familiar a su número de siempre para comprobarlo."
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    android:lineSpacingExtra="4dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Botones de Acción -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAllowContact"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Es un conocido: Permitir este número"
+            android:textSize="15sp"
+            app:cornerRadius="16dp"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCloseAlert"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Entendido, cerrar alerta"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:cornerRadius="16dp"
+            android:backgroundTint="@color/accent_indigo"
+            android:textColor="@color/text_primary" />
+
+    </LinearLayout>
+</ScrollView>

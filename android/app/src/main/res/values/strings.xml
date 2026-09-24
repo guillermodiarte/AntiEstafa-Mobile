@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Escudo Digital</string>
+    <string name="service_notification_listener_name">Escudo Digital - Detector de Notificaciones</string>
+
+    <!-- Estado Principal -->
+    <string name="status_protected_title">Protección activa</string>
+    <string name="status_protected_desc">Escudo Digital está funcionando en segundo plano.</string>
+    <string name="status_offline_title">Sin conexión</string>
+    <string name="status_offline_desc">Estamos utilizando la última base de seguridad disponible en tu celular.</string>
+
+    <!-- Botones y Acciones -->
+    <string name="btn_configure_permissions">Comprobar Permisos</string>
+    <string name="btn_allow_number">Permitir este número</string>
+    <string name="btn_close">Entendido / Cerrar</string>
+    <string name="btn_sync_now">Actualizar base ahora</string>
+
+    <!-- Alertas -->
+    <string name="alert_danger_title">Riesgo Alto Detectado</string>
+    <string name="alert_warning_title">Mensaje Sospechoso</string>
+    <string name="alert_unknown_call_title">Llamada de Número Desconocido</string>
+    <string name="alert_whatsapp_call_title">Llamada de WhatsApp Desconocida</string>
+
+    <!-- Canal de Notificaciones -->
+    <string name="channel_scam_alerts_name">Alertas de Seguridad</string>
+    <string name="channel_scam_alerts_desc">Avisos preventivos ante mensajes o llamadas sospechosas</string>
+</resources>
