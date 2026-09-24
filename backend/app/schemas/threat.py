@@ -13,6 +13,7 @@ class ThreatBase(BaseModel):
     report_count: int = 1
     confidence_score: float = 0.9
     evidence_notes: Optional[str] = None
+    images: Optional[str] = None  # JSON array string or comma separated URLs
     country: Optional[str] = "AR"
 
 
@@ -21,12 +22,15 @@ class ThreatCreate(ThreatBase):
 
 
 class ThreatUpdate(BaseModel):
+    type: Optional[str] = None
+    value: Optional[str] = None
     risk_level: Optional[str] = None
     status: Optional[str] = None
     scam_type_id: Optional[int] = None
     report_count: Optional[int] = None
     confidence_score: Optional[float] = None
     evidence_notes: Optional[str] = None
+    images: Optional[str] = None
     is_deleted: Optional[bool] = None
 
 

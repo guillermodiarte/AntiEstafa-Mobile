@@ -27,6 +27,7 @@ class Threat(Base):
     report_count = Column(Integer, default=1)
     confidence_score = Column(Float, default=0.9)  # 0.0 to 1.0
     evidence_notes = Column(Text, nullable=True)
+    images = Column(Text, nullable=True)  # JSON array of image URLs
     country = Column(String(10), default="AR", nullable=True)
     
     # Sincronización móvil incremental (versión monótona creciente)

@@ -21,6 +21,7 @@ class Report(Base):
     
     description = Column(Text, nullable=False)
     evidence = Column(Text, nullable=True)
+    images = Column(Text, nullable=True)  # JSON array of image URLs
     
     scam_type_id = Column(Integer, ForeignKey("scam_types.id"), nullable=True)
     

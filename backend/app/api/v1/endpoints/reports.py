@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.report import Report
 from app.models.threat import Threat
-from app.schemas.report import ReportRead, ReportCreate, ReportUpdateStatus
+from app.schemas.report import ReportRead, ReportCreate, ReportUpdateStatus, ReportUpdate
 from app.services.threat_service import normalize_phone, normalize_domain, increment_sync_version
+from app.api.v1.endpoints.captcha import verify_captcha_token
 
 router = APIRouter()
 
@@ -15,8 +16,28 @@ router = APIRouter()
 def submit_report(report_in: ReportCreate, db: Session = Depends(get_db)):
     """
     Permite a la ciudadanía reportar un intento de estafa desde la Web o la App.
-    El reporte ingresa en estado 'pending' para revisión y no va a la base pública automáticamente.
+    Incluye protección anti-bot con Honeypot y Desafío de Seguridad.
+    Permite adjuntar una o más imágenes como evidencia.
     """
+    # 1. Filtro Honeypot: si el campo trampa tiene contenido, es un bot
+    if report_in.hp_token and report_in.hp_token.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Petición bloqueada por sistema de detección de robots (Honeypot)."
+        )
+
+    # 2. Verificación de Desafío Anti-Bot (Captcha humano)
+    if report_in.captcha_token:
+        is_valid_human = verify_captcha_token(
+            report_in.captcha_token,
+            report_in.captcha_answer or ""
+        )
+        if not is_valid_human:
+            raise HTTPException(
+                status_code=400,
+                detail="La respuesta a la verificación de seguridad es incorrecta o expiró. Por favor resolvé el cálculo nuevamente."
+            )
+
     norm_val = report_in.threat_value.strip()
     if report_in.threat_type == "phone":
         norm_val = normalize_phone(norm_val)
@@ -29,6 +50,7 @@ def submit_report(report_in: ReportCreate, db: Session = Depends(get_db)):
         threat_value=norm_val,
         description=report_in.description,
         evidence=report_in.evidence,
+        images=report_in.images,
         scam_type_id=report_in.scam_type_id,
         country=report_in.country or "AR",
         status="pending"
@@ -53,6 +75,59 @@ def list_reports(
     return query.order_by(Report.created_at.desc()).offset(skip).limit(limit).all()
 
 
+@router.get("/{report_id}", response_model=ReportRead)
+def get_report(report_id: int, db: Session = Depends(get_db)):
+    """Obtiene el detalle completo de un reporte específico."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    return report
+
+
+@router.patch("/{report_id}", response_model=ReportRead)
+def edit_report(
+    report_id: int,
+    report_in: ReportUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Permite a los administradores / moderadores editar cualquiera de los campos
+    de un caso o reporte comunitario (ventana modal de edición).
+    """
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+
+    if report_in.channel is not None:
+        report.channel = report_in.channel
+    if report_in.threat_type is not None:
+        report.threat_type = report_in.threat_type
+    if report_in.threat_value is not None:
+        val = report_in.threat_value.strip()
+        if report.threat_type == "phone":
+            val = normalize_phone(val)
+        elif report.threat_type == "domain":
+            val = normalize_domain(val)
+        report.threat_value = val
+    if report_in.description is not None:
+        report.description = report_in.description
+    if report_in.evidence is not None:
+        report.evidence = report_in.evidence
+    if report_in.images is not None:
+        report.images = report_in.images
+    if report_in.scam_type_id is not None:
+        report.scam_type_id = report_in.scam_type_id
+    if report_in.status is not None:
+        report.status = report_in.status
+        report.reviewed_at = datetime.now(timezone.utc)
+    if report_in.reviewer_notes is not None:
+        report.reviewer_notes = report_in.reviewer_notes
+
+    db.commit()
+    db.refresh(report)
+    return report
+
+
 @router.patch("/{report_id}/status", response_model=ReportRead)
 def update_report_status(
     report_id: int,
@@ -73,7 +148,6 @@ def update_report_status(
     report.reviewed_at = datetime.now(timezone.utc)
 
     if status_update.status == "validated" and status_update.create_or_update_threat:
-        # Buscar si ya existe la amenaza para sumar reportes o crearla
         existing = db.query(Threat).filter(
             Threat.type == report.threat_type,
             Threat.value == report.threat_value
@@ -86,6 +160,7 @@ def update_report_status(
             existing.status = "validated"
             existing.is_deleted = False
             existing.version = new_version
+            existing.images = report.images or existing.images
             existing.updated_at = datetime.now(timezone.utc)
         else:
             new_threat = Threat(
@@ -97,6 +172,7 @@ def update_report_status(
                 report_count=1,
                 confidence_score=0.95,
                 evidence_notes=report.description,
+                images=report.images,
                 country=report.country,
                 version=new_version,
                 is_deleted=False

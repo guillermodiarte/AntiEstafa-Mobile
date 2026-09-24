@@ -4,7 +4,8 @@ import {
   CitizenReport,
   SystemStats,
   ThreatPublicView,
-  ThreatRecord
+  ThreatRecord,
+  CaptchaChallenge
 } from '../types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -226,5 +227,70 @@ export const apiService = {
       throw new Error(`Error al registrar amenaza: ${res.status}`);
     }
     return await res.json();
+  },
+
+  // 11. Obtener desafío anti-bot
+  async getCaptcha(): Promise<CaptchaChallenge> {
+    const res = await fetch(`${API_BASE}/captcha`);
+    if (!res.ok) {
+      throw new Error(`Error al generar captcha: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 12. Subir imágenes de evidencia al servidor
+  async uploadImages(files: File[]): Promise<string[]> {
+    if (!files || files.length === 0) return [];
+
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    const res = await fetch(`${API_BASE}/uploads`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Error al subir imágenes: ${res.status}`);
+    }
+
+    return await res.json();
+  },
+
+  // 13. Editar caso / reporte ciudadano (Admin modal)
+  async editReport(id: number, data: Partial<CitizenReport>): Promise<CitizenReport> {
+    const res = await fetch(`${API_BASE}/reports/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      throw new Error(`Error al editar reporte: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 14. Editar amenaza en base central (Admin modal)
+  async editThreat(id: number, data: Partial<ThreatRecord>): Promise<ThreatRecord> {
+    const res = await fetch(`${API_BASE}/threats/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      throw new Error(`Error al editar amenaza: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 15. Helper para URL de imagen absoluta
+  getImageUrl(path?: string | null): string {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const base = API_BASE.replace('/api/v1', '');
+    return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
   }
 };

@@ -16,7 +16,13 @@ import {
   Globe,
   Link as LinkIcon,
   ChevronDown,
-  Layers
+  Eye,
+  Edit3,
+  X,
+  Image as ImageIcon,
+  ExternalLink,
+  Save,
+  MessageSquare
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { CitizenReport, ThreatRecord, ScamType } from '../types';
@@ -44,7 +50,30 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
   const [threatTypeFilter, setThreatTypeFilter] = useState<string>('all');
   const [threatRiskFilter, setThreatRiskFilter] = useState<string>('all');
 
-  // New manual threat form modal / collapse
+  // Modals state: 'view' and 'edit'
+  const [viewingItem, setViewingItem] = useState<{ type: 'report' | 'threat'; data: any } | null>(null);
+  const [editingItem, setEditingItem] = useState<{ type: 'report' | 'threat'; data: any } | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
+  // Edit form state
+  const [editForm, setEditForm] = useState<{
+    value: string;
+    type: string;
+    risk_level: string;
+    status: string;
+    scam_type_id?: number;
+    description?: string;
+    evidence?: string;
+    reviewer_notes?: string;
+  }>({
+    value: '',
+    type: 'phone',
+    risk_level: 'high',
+    status: 'pending'
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // New manual threat form
   const [showNewThreatForm, setShowNewThreatForm] = useState(false);
   const [newType, setNewType] = useState<'phone' | 'domain' | 'url'>('phone');
   const [newValue, setNewValue] = useState('');
@@ -108,6 +137,77 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
       loadThreats();
     }
   }, [activeAdminTab, threatTypeFilter, threatRiskFilter]);
+
+  // Helper para parsear imágenes de JSON
+  const parseImages = (imgStr?: string | null): string[] => {
+    if (!imgStr) return [];
+    try {
+      if (imgStr.startsWith('[')) {
+        return JSON.parse(imgStr);
+      }
+      return imgStr.split(',').map(s => s.trim()).filter(Boolean);
+    } catch {
+      return [imgStr];
+    }
+  };
+
+  // Open Edit Modal
+  const openEditModal = (type: 'report' | 'threat', item: any) => {
+    setEditingItem({ type, data: item });
+    setEditForm({
+      value: type === 'report' ? item.threat_value : item.value,
+      type: type === 'report' ? item.threat_type : item.type,
+      risk_level: item.risk_level || 'high',
+      status: item.status || 'pending',
+      scam_type_id: item.scam_type_id,
+      description: item.description,
+      evidence: item.evidence || item.evidence_notes,
+      reviewer_notes: item.reviewer_notes
+    });
+  };
+
+  // Save Edit Modal
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    setSavingEdit(true);
+    try {
+      if (editingItem.type === 'report') {
+        await apiService.editReport(editingItem.data.id, {
+          threat_value: editForm.value,
+          threat_type: editForm.type as any,
+          scam_type_id: editForm.scam_type_id,
+          description: editForm.description,
+          evidence: editForm.evidence,
+          status: editForm.status as any,
+          reviewer_notes: editForm.reviewer_notes
+        });
+        setLastActionMessage(`Reporte #${editingItem.data.id} actualizado con éxito.`);
+        await loadReports();
+      } else {
+        await apiService.editThreat(editingItem.data.id, {
+          value: editForm.value,
+          type: editForm.type as any,
+          risk_level: editForm.risk_level as any,
+          status: editForm.status,
+          scam_type_id: editForm.scam_type_id,
+          evidence_notes: editForm.evidence
+        });
+        setLastActionMessage(`Amenaza #${editingItem.data.id} modificada. Versión de sync actualizada.`);
+        await loadThreats();
+      }
+
+      setEditingItem(null);
+      if (onDataChanged) onDataChanged();
+      setTimeout(() => setLastActionMessage(null), 5000);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error al guardar los cambios.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   // Validar reporte ciudadano y subirlo a la base central
   const handleValidate = async (reportId: number, threatVal: string) => {
@@ -201,7 +301,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
             Gestión de Casos y Base Comunitaria de Amenazas
           </h2>
           <p className="text-sm text-slate-300 max-w-3xl">
-            Aceptá nuevos casos reportados por ciudadanos o administrá todos los registros de números y dominios fraudulentos que se sincronizan con las apps de los usuarios.
+            Aceptá y editá nuevos casos reportados por ciudadanos, revisá las imágenes de evidencia adjuntas y administrá todos los registros que se sincronizan con las apps de los usuarios.
           </p>
         </div>
 
@@ -304,89 +404,134 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
             <div className="glass-panel p-16 text-center text-slate-400 space-y-2">
               <Clock className="w-10 h-10 mx-auto text-slate-500" />
               <p className="text-lg font-bold text-slate-200">No hay casos en este estado.</p>
-              <p className="text-sm">Podés enviar uno desde la solapa pública "Reportar Estafa" para probar el flujo de moderación.</p>
+              <p className="text-sm">Podés enviar uno desde la solapa pública "Reportar Estafa" para probar el flujo de moderación e imágenes.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {reports.map((report) => (
-                <div
-                  key={report.id}
-                  className="glass-panel p-6 border-white/10 space-y-4 hover:border-white/20 transition-all flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/5">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                          report.status === 'validated'
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : report.status === 'rejected'
-                            ? 'bg-slate-800 text-slate-400 border border-white/10'
-                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                        }`}>
-                          {report.status === 'validated' ? 'Validado' : report.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
+              {reports.map((report) => {
+                const reportImages = parseImages(report.images);
+
+                return (
+                  <div
+                    key={report.id}
+                    className="glass-panel p-6 border-white/10 space-y-4 hover:border-white/20 transition-all flex flex-col justify-between"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/5">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                            report.status === 'validated'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : report.status === 'rejected'
+                              ? 'bg-slate-800 text-slate-400 border border-white/10'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                          }`}>
+                            {report.status === 'validated' ? 'Validado' : report.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
+                          </span>
+                          <span className="text-xs font-mono text-slate-400">Canal: {report.channel.toUpperCase()}</span>
+                          <span className="text-xs text-slate-500 font-mono">#{report.id}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {/* Botón Ver Detalle */}
+                          <button
+                            onClick={() => setViewingItem({ type: 'report', data: report })}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                            title="Ver detalles e imágenes"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {/* Botón Editar Caso */}
+                          <button
+                            onClick={() => openEditModal('report', report)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                            title="Editar caso"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-xs text-slate-400 font-medium block">Dato reportado ({report.threat_type}):</span>
+                        <span className="text-xl font-mono font-bold text-white tracking-wide">
+                          {report.threat_value}
                         </span>
-                        <span className="text-xs font-mono text-slate-400">Canal: {report.channel.toUpperCase()}</span>
-                        <span className="text-xs text-slate-500 font-mono">#{report.id}</span>
                       </div>
 
-                      <div className="text-xs text-slate-400">
-                        {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'Hoy'}
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-xs text-slate-400 font-medium block">Dato reportado ({report.threat_type}):</span>
-                      <span className="text-xl font-mono font-bold text-white tracking-wide">
-                        {report.threat_value}
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-950/70 p-4 rounded-xl border border-white/5 space-y-2">
-                      <p className="text-xs font-semibold text-slate-400">Descripción del ciudadano:</p>
-                      <p className="text-sm text-slate-200 leading-relaxed">{report.description}</p>
-                      {report.evidence && (
-                        <p className="text-xs text-indigo-300 italic pt-2 border-t border-white/5">
-                          Evidencia adjunta: {report.evidence}
-                        </p>
-                      )}
-                      {report.reviewer_notes && (
-                        <p className="text-xs text-emerald-400 font-medium pt-2 border-t border-white/5">
-                          Nota de moderación: {report.reviewer_notes}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Botones de acción */}
-                  {report.status === 'pending' && (
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5">
-                      <button
-                        onClick={() => handleReject(report.id!)}
-                        disabled={actionLoadingId === report.id}
-                        className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-white/10 transition-all flex items-center gap-1.5"
-                      >
-                        <ShieldX className="w-4 h-4 text-slate-400" />
-                        <span>Descartar</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleValidate(report.id!, report.threat_value)}
-                        disabled={actionLoadingId === report.id}
-                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
-                      >
-                        {actionLoadingId === report.id ? (
-                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                        ) : (
-                          <>
-                            <ShieldCheck className="w-4 h-4" />
-                            <span>Aceptar e Incorporar a la Base</span>
-                          </>
+                      <div className="bg-slate-950/70 p-4 rounded-xl border border-white/5 space-y-2">
+                        <p className="text-xs font-semibold text-slate-400">Descripción del ciudadano:</p>
+                        <p className="text-sm text-slate-200 leading-relaxed line-clamp-3">{report.description}</p>
+                        {report.evidence && (
+                          <p className="text-xs text-indigo-300 italic pt-2 border-t border-white/5">
+                            Evidencia: {report.evidence}
+                          </p>
                         )}
-                      </button>
+                        {report.reviewer_notes && (
+                          <p className="text-xs text-emerald-400 font-medium pt-2 border-t border-white/5">
+                            Nota de moderación: {report.reviewer_notes}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Miniaturas de imágenes si las hay */}
+                      {reportImages.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                            {reportImages.length} {reportImages.length === 1 ? 'imagen adjunta' : 'imágenes adjuntas'}:
+                          </span>
+                          <div className="flex items-center gap-2 overflow-x-auto py-1">
+                            {reportImages.map((img, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setZoomedImage(apiService.getImageUrl(img))}
+                                className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 hover:border-indigo-500 transition-all flex-shrink-0 group relative"
+                              >
+                                <img
+                                  src={apiService.getImageUrl(img)}
+                                  alt="Evidencia"
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {/* Botones de acción */}
+                    {report.status === 'pending' && (
+                      <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5">
+                        <button
+                          onClick={() => handleReject(report.id!)}
+                          disabled={actionLoadingId === report.id}
+                          className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-white/10 transition-all flex items-center gap-1.5"
+                        >
+                          <ShieldX className="w-4 h-4 text-slate-400" />
+                          <span>Descartar</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleValidate(report.id!, report.threat_value)}
+                          disabled={actionLoadingId === report.id}
+                          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
+                        >
+                          {actionLoadingId === report.id ? (
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                          ) : (
+                            <>
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>Aceptar e Incorporar a la Base</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -559,7 +704,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
             </div>
           </div>
 
-          {/* Tabla de registros */}
+          {/* Tabla de registros con botones Ver y Editar */}
           {threatsLoading ? (
             <div className="flex justify-center p-16">
               <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -570,7 +715,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
               <p className="text-lg font-bold text-slate-200">No se encontraron registros con los filtros seleccionados.</p>
             </div>
           ) : (
-            <div className="glass-panel overflow-hidden border-white/10">
+            <div className="glass-panel overflow-hidden border-white/10 shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -582,6 +727,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                       <th className="py-3.5 px-4">Riesgo</th>
                       <th className="py-3.5 px-4">Reportes</th>
                       <th className="py-3.5 px-4">Versión Sync</th>
+                      <th className="py-3.5 px-4 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 text-xs text-slate-300">
@@ -619,6 +765,24 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                         <td className="py-3 px-4 font-mono text-emerald-400 font-bold">
                           v{t.version}
                         </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setViewingItem({ type: 'threat', data: t })}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                              title="Ver detalles"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openEditModal('threat', t)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                              title="Editar registro"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -626,6 +790,309 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL 1: VER DETALLES E IMÁGENES */}
+      {viewingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="glass-panel p-6 sm:p-8 border-indigo-500/40 bg-slate-900/95 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+                  <Eye className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    {viewingItem.type === 'report' ? `Detalle del Caso #${viewingItem.data.id}` : `Detalle de Amenaza #${viewingItem.data.id}`}
+                  </h3>
+                  <span className="text-xs text-slate-400 font-mono">
+                    Estado: <strong className="capitalize text-indigo-300">{viewingItem.data.status}</strong>
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingItem(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-white/5 space-y-1">
+                <span className="text-xs text-slate-400 uppercase font-semibold">Valor Registrado ({viewingItem.data.threat_type || viewingItem.data.type}):</span>
+                <p className="text-xl font-mono font-bold text-white">
+                  {viewingItem.data.threat_value || viewingItem.data.value}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5">
+                  <span className="text-[11px] text-slate-400 block font-semibold">Riesgo</span>
+                  <span className="text-sm font-bold text-white uppercase">{viewingItem.data.risk_level || 'HIGH'}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5">
+                  <span className="text-[11px] text-slate-400 block font-semibold">Modalidad</span>
+                  <span className="text-xs font-medium text-slate-200">
+                    {viewingItem.data.scam_type?.name || 'No clasificada'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5">
+                  <span className="text-[11px] text-slate-400 block font-semibold">Reportes</span>
+                  <span className="text-sm font-bold text-emerald-400">{viewingItem.data.report_count || 1}</span>
+                </div>
+              </div>
+
+              {(viewingItem.data.description || viewingItem.data.evidence_notes) && (
+                <div className="p-4 rounded-xl bg-slate-950/60 border border-white/5 space-y-1.5">
+                  <span className="text-xs text-slate-400 font-semibold block">Descripción / Relato del Hecho:</span>
+                  <p className="text-sm text-slate-200 leading-relaxed">
+                    {viewingItem.data.description || viewingItem.data.evidence_notes}
+                  </p>
+                </div>
+              )}
+
+              {viewingItem.data.evidence && (
+                <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-200">
+                  <strong>Detalles adicionales de evidencia:</strong> {viewingItem.data.evidence}
+                </div>
+              )}
+
+              {/* Galería de Imágenes de Evidencia */}
+              {(() => {
+                const images = parseImages(viewingItem.data.images);
+                if (images.length === 0) return null;
+
+                return (
+                  <div className="space-y-3 pt-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-indigo-400" />
+                      <span>Imágenes Adjuntas de Evidencia ({images.length})</span>
+                    </span>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {images.map((img, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setZoomedImage(apiService.getImageUrl(img))}
+                          className="cursor-pointer group relative rounded-xl overflow-hidden border border-white/10 bg-slate-950 aspect-square shadow-md"
+                        >
+                          <img
+                            src={apiService.getImageUrl(img)}
+                            alt={`Evidencia ${idx + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <span className="text-xs font-bold text-white bg-indigo-600/80 px-2 py-1 rounded-md">
+                              Ampliar 🔍
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="pt-4 border-t border-white/10 flex justify-end">
+              <button
+                onClick={() => setViewingItem(null)}
+                className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: EDITAR CASO O AMENAZA */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <form
+            onSubmit={handleSaveEdit}
+            className="glass-panel p-6 sm:p-8 border-indigo-500/40 bg-slate-900/95 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-5 shadow-2xl relative"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                  <Edit3 className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    {editingItem.type === 'report' ? `Editar Caso #${editingItem.data.id}` : `Editar Amenaza #${editingItem.data.id}`}
+                  </h3>
+                  <span className="text-xs text-slate-400">Modificá los campos necesarios y guardá los cambios</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Tipo de Amenaza</label>
+                  <select
+                    value={editForm.type}
+                    onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500"
+                  >
+                    <option value="phone">Teléfono</option>
+                    <option value="domain">Dominio</option>
+                    <option value="url">URL Completa</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Valor Identificador</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.value}
+                    onChange={(e) => setEditForm({ ...editForm, value: e.target.value })}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white font-mono text-xs outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nivel de Riesgo</label>
+                  <select
+                    value={editForm.risk_level}
+                    onChange={(e) => setEditForm({ ...editForm, risk_level: e.target.value })}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500"
+                  >
+                    <option value="high">🔴 Riesgo Alto</option>
+                    <option value="medium">🟡 Riesgo Medio</option>
+                    <option value="low">🟢 Riesgo Bajo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Estado</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500 capitalize"
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="validated">Validado</option>
+                    <option value="rejected">Rechazado</option>
+                    <option value="in_review">En Revisión</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Modalidad de Estafa</label>
+                <select
+                  value={editForm.scam_type_id || ''}
+                  onChange={(e) => setEditForm({ ...editForm, scam_type_id: Number(e.target.value) })}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500"
+                >
+                  <option value="">Sin clasificar</option>
+                  {scamTypes.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {editingItem.type === 'report' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Descripción del Ciudadano</label>
+                  <textarea
+                    rows={3}
+                    value={editForm.description || ''}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500 resize-none"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Notas de Evidencia / Comentarios</label>
+                <input
+                  type="text"
+                  value={editForm.evidence || ''}
+                  onChange={(e) => setEditForm({ ...editForm, evidence: e.target.value })}
+                  placeholder="Detalles técnicos o pruebas observadas"
+                  className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {editingItem.type === 'report' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nota del Moderador</label>
+                  <input
+                    type="text"
+                    value={editForm.reviewer_notes || ''}
+                    onChange={(e) => setEditForm({ ...editForm, reviewer_notes: e.target.value })}
+                    placeholder="Comentario interno del equipo de seguridad"
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-white/10 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={savingEdit || !editForm.value.trim()}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/30 flex items-center gap-2"
+              >
+                {savingEdit ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Guardar Cambios</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL 3: ZOOM DE IMAGEN (LIGHTBOX) */}
+      {zoomedImage && (
+        <div
+          onClick={() => setZoomedImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md cursor-pointer animate-fadeIn"
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img
+              src={zoomedImage}
+              alt="Evidencia ampliada"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/20"
+            />
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg hover:bg-rose-500"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

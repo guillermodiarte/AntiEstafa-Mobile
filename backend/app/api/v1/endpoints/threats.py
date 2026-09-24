@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.threat import Threat
 from app.models.scam_type import ScamType
-from app.schemas.threat import ThreatRead, ThreatCreate, ThreatCheckResult, ThreatPublicView
+from app.schemas.threat import ThreatRead, ThreatCreate, ThreatUpdate, ThreatCheckResult, ThreatPublicView
 from app.services.threat_service import (
     check_phone_threat,
     check_domain_threat,
@@ -132,6 +132,72 @@ def create_threat(threat_in: ThreatCreate, db: Session = Depends(get_db)):
         is_deleted=False
     )
     db.add(threat)
+    db.commit()
+    db.refresh(threat)
+    return threat
+
+
+@router.get("/{threat_id}", response_model=ThreatRead)
+def get_threat(threat_id: int, db: Session = Depends(get_db)):
+    """Obtiene el detalle de una amenaza específica."""
+    threat = db.query(Threat).filter(Threat.id == threat_id, Threat.is_deleted == False).first()
+    if not threat:
+        raise HTTPException(status_code=404, detail="Amenaza no encontrada")
+    return threat
+
+
+@router.patch("/{threat_id}", response_model=ThreatRead)
+def edit_threat(
+    threat_id: int,
+    threat_in: ThreatUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Permite editar los datos de una amenaza en la base central (ventana modal de administración).
+    Si se modifica un valor relevante, incrementa la versión de sincronización para propagar a los móviles.
+    """
+    threat = db.query(Threat).filter(Threat.id == threat_id, Threat.is_deleted == False).first()
+    if not threat:
+        raise HTTPException(status_code=404, detail="Amenaza no encontrada")
+
+    data_changed = False
+
+    if threat_in.type is not None and threat_in.type != threat.type:
+        threat.type = threat_in.type
+        data_changed = True
+    if threat_in.value is not None:
+        val = threat_in.value.strip()
+        if threat.type == "phone":
+            val = normalize_phone(val)
+        elif threat.type == "domain":
+            val = normalize_domain(val)
+        if val != threat.value:
+            threat.value = val
+            data_changed = True
+    if threat_in.risk_level is not None and threat_in.risk_level != threat.risk_level:
+        threat.risk_level = threat_in.risk_level
+        data_changed = True
+    if threat_in.status is not None and threat_in.status != threat.status:
+        threat.status = threat_in.status
+        data_changed = True
+    if threat_in.scam_type_id is not None:
+        threat.scam_type_id = threat_in.scam_type_id
+        data_changed = True
+    if threat_in.report_count is not None:
+        threat.report_count = threat_in.report_count
+    if threat_in.confidence_score is not None:
+        threat.confidence_score = threat_in.confidence_score
+    if threat_in.evidence_notes is not None:
+        threat.evidence_notes = threat_in.evidence_notes
+    if threat_in.images is not None:
+        threat.images = threat_in.images
+    if threat_in.is_deleted is not None:
+        threat.is_deleted = threat_in.is_deleted
+        data_changed = True
+
+    if data_changed:
+        threat.version = increment_sync_version(db)
+
     db.commit()
     db.refresh(threat)
     return threat

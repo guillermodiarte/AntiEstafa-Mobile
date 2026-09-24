@@ -1,11 +1,17 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
 from app.models import *  # Asegura carga de todos los modelos
 from app.seeds.seed_data import seed_database
 from app.api.v1.router import api_router
+
+UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @asynccontextmanager
@@ -14,6 +20,19 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        # Migración ligera para columnas nuevas en SQLite existente
+        try:
+            db.execute(text("ALTER TABLE reports ADD COLUMN images TEXT"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("ALTER TABLE threats ADD COLUMN images TEXT"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
         seed_database(db)
     finally:
         db.close()
@@ -57,6 +76,7 @@ else:
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 @app.get("/")

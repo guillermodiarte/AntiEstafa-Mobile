@@ -38,6 +38,7 @@ export interface CitizenReport {
   threat_value: string;
   description: string;
   evidence?: string;
+  images?: string; // JSON string array of URLs
   scam_type_id?: number;
   country?: string;
   status?: ThreatStatus;
@@ -45,6 +46,12 @@ export interface CitizenReport {
   reviewed_at?: string;
   reviewer_notes?: string;
   scam_type?: ScamType;
+}
+
+export interface CaptchaChallenge {
+  token: string;
+  question: string;
+  expires_in: number;
 }
 
 export interface ScamTypeStat {
@@ -62,6 +69,7 @@ export interface ThreatRecord {
   report_count: number;
   confidence_score: number;
   evidence_notes?: string;
+  images?: string;
   country: string;
   version: number;
   created_at: string;

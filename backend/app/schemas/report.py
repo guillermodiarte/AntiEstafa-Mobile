@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 from app.schemas.scam_type import ScamTypeRead
 
@@ -10,12 +10,27 @@ class ReportBase(BaseModel):
     threat_value: str
     description: str
     evidence: Optional[str] = None
+    images: Optional[str] = None  # JSON array string or comma separated URLs
     scam_type_id: Optional[int] = None
     country: Optional[str] = "AR"
 
 
 class ReportCreate(ReportBase):
-    pass
+    captcha_token: Optional[str] = None
+    captcha_answer: Optional[str] = None
+    hp_token: Optional[str] = None  # Honeypot field for bot detection
+
+
+class ReportUpdate(BaseModel):
+    channel: Optional[str] = None
+    threat_type: Optional[str] = None
+    threat_value: Optional[str] = None
+    description: Optional[str] = None
+    evidence: Optional[str] = None
+    images: Optional[str] = None
+    scam_type_id: Optional[int] = None
+    status: Optional[str] = None
+    reviewer_notes: Optional[str] = None
 
 
 class ReportUpdateStatus(BaseModel):
