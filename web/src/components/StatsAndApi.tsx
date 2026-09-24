@@ -98,7 +98,7 @@ export const StatsAndApi: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-10 animate-fadeIn max-w-5xl mx-auto">
+    <div className="space-y-10 animate-fadeIn w-full max-w-[1500px] mx-auto">
       {/* Title */}
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-extrabold text-white">

@@ -1,14 +1,14 @@
 "use client";
 
 import React from 'react';
-import { Shield, Search, BookOpen, AlertCircle, BarChart3, Lock, Eye } from 'lucide-react';
+import { Shield, Search, BookOpen, AlertCircle, BarChart3, Eye, Lock } from 'lucide-react';
+import Link from 'next/link';
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   largeText: boolean;
   setLargeText: (val: boolean) => void;
-  pendingCount: number;
   syncVersion: number;
 }
 
@@ -17,7 +17,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   largeText,
   setLargeText,
-  pendingCount,
   syncVersion
 }) => {
   const navItems = [
@@ -25,25 +24,19 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'scams', label: 'Modalidades Comunes', icon: BookOpen },
     { id: 'report', label: 'Reportar Estafa', icon: AlertCircle },
     { id: 'stats', label: 'Métricas & API', icon: BarChart3 },
-    { 
-      id: 'admin', 
-      label: 'Panel Moderador', 
-      icon: Lock,
-      badge: pendingCount > 0 ? pendingCount : undefined
-    },
   ];
 
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-md bg-[#080d1a]/85 border-b border-white/10 px-4 lg:px-8 py-3.5 transition-all">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#080d1a]/90 border-b border-white/10 px-4 sm:px-6 lg:px-10 py-3.5 transition-all">
+      <div className="w-full max-w-[1600px] mx-auto flex flex-col xl:flex-row items-center justify-between gap-4">
         {/* Logo and Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
+        <div className="flex items-center gap-3.5 flex-shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 ring-1 ring-white/20">
             <Shield className="w-6 h-6 text-white" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">
+            <div className="flex items-center gap-2.5">
+              <span className="font-black text-xl tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-200 bg-clip-text text-transparent">
                 Escudo Digital
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
@@ -51,14 +44,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 v{syncVersion} Activo
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 font-medium">
               Ecosistema Abierto de Prevención de Estafas • FormosaHack
             </p>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 bg-slate-900/80 p-1.5 rounded-xl border border-white/10 shadow-inner overflow-x-auto max-w-full">
+        {/* Navigation Tabs - Sin scroll horizontal, amplio y fluido */}
+        <nav className="flex items-center flex-wrap justify-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-white/10 shadow-inner">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -66,38 +59,42 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
                   isActive
-                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/35 ring-1 ring-white/20'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
-                {item.badge !== undefined && (
-                  <span className="ml-1 px-1.5 py-0.2 text-[11px] font-bold rounded-full bg-amber-500 text-slate-950">
-                    {item.badge}
-                  </span>
-                )}
               </button>
             );
           })}
         </nav>
 
-        {/* Accessibility Toggle */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls & Accessibility */}
+        <div className="flex items-center gap-3 flex-shrink-0">
           <button
             onClick={() => setLargeText(!largeText)}
             title="Aumentar tamaño de letra para lectura más accesible"
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
               largeText
                 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/20'
-                : 'bg-slate-900 text-slate-400 border-white/10 hover:text-slate-200'
+                : 'bg-slate-900/90 text-slate-400 border-white/10 hover:text-slate-200 hover:border-white/20'
             }`}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-4 h-4" />
             <span>{largeText ? 'Letra Estándar' : 'Letra Grande (Adultos Mayores)'}</span>
           </button>
+
+          <Link
+            href="/admin"
+            title="Acceso restringido para moderadores"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-900/80 hover:bg-indigo-950/40 border border-white/10 hover:border-indigo-500/30 transition-all"
+          >
+            <Lock className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">/admin</span>
+          </Link>
         </div>
       </div>
     </header>

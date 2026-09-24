@@ -67,7 +67,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-fadeIn">
+    <div className="max-w-4xl mx-auto space-y-6 animate-fadeIn">
       <div className="text-center space-y-2">
         <h2 className={`${largeText ? 'text-3xl lg:text-4xl' : 'text-2xl lg:text-3xl'} font-extrabold text-white`}>
           Reportar un Intento de Estafa

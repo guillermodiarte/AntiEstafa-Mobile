@@ -52,6 +52,23 @@ export interface ScamTypeStat {
   count: number;
 }
 
+export interface ThreatRecord {
+  id: number;
+  type: ThreatType;
+  value: string;
+  risk_level: RiskLevel;
+  status: string;
+  scam_type_id?: number;
+  report_count: number;
+  confidence_score: number;
+  evidence_notes?: string;
+  country: string;
+  version: number;
+  created_at: string;
+  updated_at?: string;
+  scam_type?: ScamType;
+}
+
 export interface SystemStats {
   total_threats: number;
   total_phone_threats: number;

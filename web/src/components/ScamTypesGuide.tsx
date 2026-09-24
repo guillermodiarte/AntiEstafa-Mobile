@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Users, CreditCard, Landmark, ShieldAlert, ShoppingBag, AlertCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, CreditCard, Landmark, ShieldAlert, ShoppingBag, AlertCircle, CheckCircle, HelpCircle } from 'lucide-react';
 import { apiService } from '../services/api';
 import { ScamType } from '../types';
 
@@ -20,7 +20,6 @@ const iconMap: Record<string, React.ElementType> = {
 export const ScamTypesGuide: React.FC<ScamTypesGuideProps> = ({ largeText }) => {
   const [types, setTypes] = useState<ScamType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<number | null>(1);
 
   useEffect(() => {
     async function loadData() {
@@ -37,92 +36,61 @@ export const ScamTypesGuide: React.FC<ScamTypesGuideProps> = ({ largeText }) => 
   }, []);
 
   return (
-    <div className="space-y-8 animate-fadeIn max-w-5xl mx-auto">
-      <div className="text-center space-y-2">
-        <h2 className={`${largeText ? 'text-3xl lg:text-4xl' : 'text-2xl lg:text-3xl'} font-extrabold text-white`}>
+    <div className="space-y-10 animate-fadeIn w-full">
+      <div className="text-center max-w-4xl mx-auto space-y-3">
+        <span className="px-3.5 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+          Educación y Detección Temprana
+        </span>
+        <h2 className={`${largeText ? 'text-3xl lg:text-4xl' : 'text-2xl lg:text-3xl'} font-black text-white tracking-tight`}>
           Modalidades Frecuentes de Estafas Digitales
         </h2>
-        <p className={`${largeText ? 'text-lg' : 'text-sm'} text-slate-400 max-w-2xl mx-auto`}>
-          Aprender a reconocer los engaños más comunes es la mejor herramienta de protección para vos y tu familia.
+        <p className={`${largeText ? 'text-lg' : 'text-base'} text-slate-400 max-w-2xl mx-auto leading-relaxed`}>
+          Aprender a reconocer los engaños más comunes es la primera y mejor línea de defensa para vos y toda tu familia.
         </p>
       </div>
 
       {loading ? (
-        <div className="flex justify-center p-12">
-          <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="flex justify-center p-16">
+          <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {types.map((scam) => {
             const Icon = iconMap[scam.icon || 'shield-alert'] || ShieldAlert;
-            const isExpanded = expandedId === scam.id;
 
             return (
               <div
                 key={scam.id}
-                className="glass-panel overflow-hidden border-white/10 hover:border-indigo-500/40 transition-all"
+                className="glass-panel p-6 sm:p-7 border-white/10 hover:border-indigo-500/30 flex flex-col justify-between transition-all group hover:shadow-2xl hover:shadow-indigo-500/10 relative overflow-hidden"
               >
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : scam.id)}
-                  className="w-full p-5 sm:p-6 text-left flex items-center justify-between gap-4 bg-slate-900/50 hover:bg-slate-900/80 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-cyan-500 opacity-60 group-hover:opacity-100 transition-opacity"></div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0 group-hover:scale-105 transition-transform">
                       <Icon className="w-6 h-6" />
                     </div>
-                    <div>
-                      <h3 className={`${largeText ? 'text-xl' : 'text-lg'} font-bold text-white`}>
-                        {scam.name}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Categoría validada en la base central
-                      </p>
-                    </div>
+                    <h3 className={`${largeText ? 'text-xl' : 'text-lg'} font-bold text-white leading-snug`}>
+                      {scam.name}
+                    </h3>
                   </div>
-                  <div className="text-slate-400 p-2">
-                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+
+                  <p className={`${largeText ? 'text-base' : 'text-sm'} text-slate-300 leading-relaxed`}>
+                    {scam.description}
+                  </p>
+                </div>
+
+                <div className="mt-6 pt-5 border-t border-white/10 space-y-2.5">
+                  <div className="flex items-center gap-2 text-emerald-400">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-xs font-bold uppercase tracking-wider">¿Cómo protegerte?</span>
                   </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="p-5 sm:p-6 border-t border-white/5 space-y-5 bg-slate-950/40">
-                    <div className="space-y-2">
-                      <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <AlertCircle className="w-4 h-4" />
-                        ¿Cómo funciona este engaño?
-                      </span>
-                      <p className={`${largeText ? 'text-lg font-medium' : 'text-sm'} text-slate-200 leading-relaxed`}>
-                        {scam.description}
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-1.5">
-                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <CheckCircle className="w-4 h-4" />
-                        ¿Qué tenés que hacer si recibís esto?
-                      </span>
-                      <p className={`${largeText ? 'text-base font-semibold' : 'text-sm'} text-emerald-200 leading-relaxed`}>
-                        {scam.advice}
-                      </p>
-                    </div>
-
-                    {/* Señales de Alerta Típicas */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
-                      <div className="bg-slate-900 p-3 rounded-lg border border-white/5">
-                        <strong className="text-rose-400 block mb-1">🚨 Sensación de urgencia</strong>
-                        Te dicen que se vence hoy o que alguien corre peligro para que no pienses.
-                      </div>
-                      <div className="bg-slate-900 p-3 rounded-lg border border-white/5">
-                        <strong className="text-rose-400 block mb-1">🔑 Piden códigos o transferencias</strong>
-                        Solicitan que mandes dinero o compartas el código de 6 dígitos de WhatsApp.
-                      </div>
-                      <div className="bg-slate-900 p-3 rounded-lg border border-white/5">
-                        <strong className="text-rose-400 block mb-1">📱 Número desconocido</strong>
-                        El contacto no figura en tu agenda o dice ser un 'nuevo número'.
-                      </div>
-                    </div>
+                  <div className="bg-slate-950/70 p-4 rounded-xl border border-white/5">
+                    <p className={`${largeText ? 'text-base' : 'text-xs sm:text-sm'} font-medium text-slate-200 leading-relaxed`}>
+                      {scam.advice || 'Desconfiá de la urgencia y verificá siempre con fuentes oficiales.'}
+                    </p>
                   </div>
-                )}
+                </div>
               </div>
             );
           })}

@@ -3,7 +3,8 @@ import {
   ScamType,
   CitizenReport,
   SystemStats,
-  ThreatPublicView
+  ThreatPublicView,
+  ThreatRecord
 } from '../types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -185,6 +186,44 @@ export const apiService = {
     });
     if (!res.ok) {
       throw new Error(`Error al moderar reporte: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 9. Listar todas las amenazas registradas (Admin)
+  async getThreats(params?: { type?: string; risk_level?: string; q?: string }): Promise<ThreatRecord[]> {
+    const searchParams = new URLSearchParams();
+    if (params?.type) searchParams.append('type', params.type);
+    if (params?.risk_level) searchParams.append('risk_level', params.risk_level);
+    if (params?.q) searchParams.append('q', params.q);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    return fetchWithFallback<ThreatRecord[]>(`${API_BASE}/threats${qs}`, undefined, []);
+  },
+
+  // 10. Crear amenaza manual (Admin)
+  async createThreat(data: {
+    type: string;
+    value: string;
+    risk_level: string;
+    status?: string;
+    scam_type_id?: number;
+    evidence_notes?: string;
+    report_count?: number;
+    confidence_score?: number;
+  }): Promise<ThreatRecord> {
+    const res = await fetch(`${API_BASE}/threats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'validated',
+        report_count: 1,
+        confidence_score: 1.0,
+        country: 'AR',
+        ...data
+      })
+    });
+    if (!res.ok) {
+      throw new Error(`Error al registrar amenaza: ${res.status}`);
     }
     return await res.json();
   }
