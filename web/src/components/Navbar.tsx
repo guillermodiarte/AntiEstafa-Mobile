@@ -21,8 +21,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const navItems = [
     { id: 'search', label: 'Buscador de Amenazas', icon: Search },
-    { id: 'scams', label: 'Modalidades Comunes', icon: BookOpen },
     { id: 'report', label: 'Reportar Estafa', icon: AlertCircle },
+    { id: 'scams', label: 'Modalidades Comunes', icon: BookOpen },
     { id: 'stats', label: 'Métricas & API', icon: BarChart3 },
   ];
 
@@ -59,11 +59,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
-                  isActive
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${isActive
                     ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/35 ring-1 ring-white/20'
                     : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
-                }`}
+                  }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
@@ -77,11 +76,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setLargeText(!largeText)}
             title="Aumentar tamaño de letra para lectura más accesible"
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
-              largeText
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${largeText
                 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/20'
                 : 'bg-slate-900/90 text-slate-400 border-white/10 hover:text-slate-200 hover:border-white/20'
-            }`}
+              }`}
           >
             <Eye className="w-4 h-4" />
             <span>{largeText ? 'Letra Estándar' : 'Letra Grande (Adultos Mayores)'}</span>

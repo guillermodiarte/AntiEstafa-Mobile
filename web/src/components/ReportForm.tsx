@@ -503,11 +503,13 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
                   }}
                   className="w-full py-3 px-3.5 rounded-xl bg-slate-950 border border-white/15 text-white text-sm outline-none focus:border-indigo-500 transition-colors"
                 >
-                  {scamTypes.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.name}
-                    </option>
-                  ))}
+                  {scamTypes
+                    .filter((st) => st.slug !== 'otro' && !st.name.toLowerCase().includes('otro'))
+                    .map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name}
+                      </option>
+                    ))}
                   <option value="other" className="font-bold text-indigo-300">
                     Otro tipo de engaño (describir caso específico)
                   </option>
