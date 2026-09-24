@@ -88,3 +88,20 @@ export interface SystemStats {
   top_scam_types: ScamTypeStat[];
   status: string;
 }
+
+export interface GroupedReport {
+  canonical_value: string;
+  threat_type: string;
+  total_reports: number;
+  pending_reports: number;
+  validated_reports: number;
+  rejected_reports: number;
+  channels: string[];
+  all_images: string[];
+  sample_descriptions: string[];
+  scam_type_id?: number | null;
+  scam_type_name?: string | null;
+  latest_created_at: string;
+  report_ids: number[];
+  reports: CitizenReport[];
+}

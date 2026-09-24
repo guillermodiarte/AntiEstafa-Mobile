@@ -1,3 +1,4 @@
+import os
 import json
 from typing import List, Union
 from pydantic import field_validator
@@ -10,6 +11,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "escudo-digital-insecure-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
     DATABASE_URL: str = "sqlite:///./escudo_digital.db"
+    UPLOAD_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
     
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",

@@ -42,6 +42,13 @@ INITIAL_SCAM_TYPES = [
         "description": "Publicidades con ofertas inverosímiles (ej: electrodomésticos a precios ridículos) o préstamos inmediatos 'sin requisitos' que exigen un adelanto por transferencia.",
         "advice": "Si el precio es demasiado bueno para ser real o te piden transferir dinero antes de darte el préstamo, es una estafa.",
         "icon": "shopping-bag"
+    },
+    {
+        "name": "Otro Tipo de Engaño / No listado",
+        "slug": "otro",
+        "description": "Modalidades emergentes o no contempladas en las categorías principales (falsas ofertas laborales, cripto, alquileres ficticios, etc.).",
+        "advice": "Desconfiá de solicitudes inusuales de dinero, claves o códigos de verificación.",
+        "icon": "help-circle"
     }
 ]
 

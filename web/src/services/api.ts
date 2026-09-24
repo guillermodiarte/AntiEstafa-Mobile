@@ -5,7 +5,8 @@ import {
   SystemStats,
   ThreatPublicView,
   ThreatRecord,
-  CaptchaChallenge
+  CaptchaChallenge,
+  GroupedReport
 } from '../types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -292,5 +293,54 @@ export const apiService = {
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
     const base = API_BASE.replace('/api/v1', '');
     return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+  },
+
+  // 16. Obtener denuncias agrupadas canónicamente por Regex
+  async getGroupedReports(status?: string, threat_type?: string): Promise<GroupedReport[]> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (threat_type) params.append('threat_type', threat_type);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return fetchWithFallback<GroupedReport[]>(`${API_BASE}/reports/grouped${qs}`, undefined, []);
+  },
+
+  // 17. Validar e incorporar grupo completo a base central
+  async validateGroupedReports(data: {
+    canonical_value: string;
+    threat_type: string;
+    scam_type_id?: number;
+    risk_level?: string;
+    reviewer_notes?: string;
+    report_ids?: number[];
+  }): Promise<any> {
+    const res = await fetch(`${API_BASE}/reports/group/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Error al validar grupo: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 18. Descartar grupo completo
+  async rejectGroupedReports(data: {
+    canonical_value: string;
+    threat_type: string;
+    reviewer_notes?: string;
+    report_ids?: number[];
+  }): Promise<any> {
+    const res = await fetch(`${API_BASE}/reports/group/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Error al descartar grupo: ${res.status}`);
+    }
+    return await res.json();
   }
 };

@@ -48,3 +48,36 @@ class ReportRead(ReportBase):
     scam_type: Optional[ScamTypeRead] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GroupedReport(BaseModel):
+    canonical_value: str
+    threat_type: str
+    total_reports: int
+    pending_reports: int
+    validated_reports: int
+    rejected_reports: int
+    channels: List[str]
+    all_images: List[str]
+    sample_descriptions: List[str]
+    scam_type_id: Optional[int] = None
+    scam_type_name: Optional[str] = None
+    latest_created_at: datetime
+    report_ids: List[int]
+    reports: List[ReportRead]
+
+
+class GroupValidateRequest(BaseModel):
+    canonical_value: str
+    threat_type: str
+    scam_type_id: Optional[int] = None
+    risk_level: str = "high"
+    reviewer_notes: Optional[str] = "Aprobado y consolidado por moderación comunitaria"
+    report_ids: Optional[List[int]] = None
+
+
+class GroupRejectRequest(BaseModel):
+    canonical_value: str
+    threat_type: str
+    reviewer_notes: Optional[str] = "Descartado por moderador (reporte falso o inválido)"
+    report_ids: Optional[List[int]] = None

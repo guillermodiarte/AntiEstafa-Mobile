@@ -16,16 +16,21 @@ import {
   Globe,
   Link as LinkIcon,
   ChevronDown,
+  ChevronUp,
   Eye,
   Edit3,
   X,
   Image as ImageIcon,
   ExternalLink,
   Save,
-  MessageSquare
+  MessageSquare,
+  Layers,
+  ListFilter,
+  CheckCheck,
+  Sparkles
 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { CitizenReport, ThreatRecord, ScamType } from '../types';
+import { CitizenReport, ThreatRecord, ScamType, GroupedReport } from '../types';
 
 interface AdminModerationProps {
   onDataChanged?: () => void;
@@ -38,9 +43,13 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
 
   // Reports state
   const [reports, setReports] = useState<CitizenReport[]>([]);
+  const [groupedReports, setGroupedReports] = useState<GroupedReport[]>([]);
   const [reportsLoading, setReportsLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const [groupActionLoadingKey, setGroupActionLoadingKey] = useState<string | null>(null);
   const [reportFilter, setReportFilter] = useState<'pending' | 'validated' | 'all'>('pending');
+  const [viewMode, setViewMode] = useState<'grouped' | 'individual'>('grouped');
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState<Record<string, boolean>>({});
   const [lastActionMessage, setLastActionMessage] = useState<string | null>(null);
 
   // All records state
@@ -97,12 +106,16 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     loadMeta();
   }, []);
 
-  // Load citizen reports
+  // Load citizen reports (individual & grouped)
   const loadReports = async () => {
     setReportsLoading(true);
     try {
-      const data = await apiService.getReports(reportFilter === 'all' ? undefined : reportFilter);
-      setReports(data);
+      const [dataIndiv, dataGrouped] = await Promise.all([
+        apiService.getReports(reportFilter === 'all' ? undefined : reportFilter),
+        apiService.getGroupedReports(reportFilter === 'all' ? undefined : reportFilter)
+      ]);
+      setReports(dataIndiv);
+      setGroupedReports(dataGrouped);
     } catch (e) {
       console.error(e);
     } finally {
@@ -252,6 +265,60 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     }
   };
 
+  // Toggle desglose de un grupo
+  const toggleGroupExpanded = (key: string) => {
+    setExpandedGroupKeys(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  // Validar grupo unificado e incorporar a base central
+  const handleValidateGroup = async (group: GroupedReport) => {
+    setGroupActionLoadingKey(group.canonical_value);
+    try {
+      const res = await apiService.validateGroupedReports({
+        canonical_value: group.canonical_value,
+        threat_type: group.threat_type,
+        scam_type_id: group.scam_type_id || undefined,
+        risk_level: 'high',
+        reviewer_notes: `Validado y unificado en bloque (${group.total_reports} denuncias agrupadas).`
+      });
+      setLastActionMessage(`¡Amenaza "${group.canonical_value}" validada y unificada! Se consolidaron ${res.validated_count} denuncias y ${res.total_images} imágenes en la base central.`);
+      await loadReports();
+      if (activeAdminTab === 'records') await loadThreats();
+      if (onDataChanged) onDataChanged();
+      setTimeout(() => setLastActionMessage(null), 5000);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error al validar el grupo.');
+    } finally {
+      setGroupActionLoadingKey(null);
+    }
+  };
+
+  // Descartar grupo completo
+  const handleRejectGroup = async (group: GroupedReport) => {
+    if (!confirm(`¿Estás seguro de descartar las ${group.pending_reports} denuncias pendientes de "${group.canonical_value}"?`)) return;
+    setGroupActionLoadingKey(group.canonical_value);
+    try {
+      const res = await apiService.rejectGroupedReports({
+        canonical_value: group.canonical_value,
+        threat_type: group.threat_type,
+        reviewer_notes: 'Descartado en moderación de grupo'
+      });
+      setLastActionMessage(`Se descartaron ${res.rejected_count} denuncias para "${group.canonical_value}".`);
+      await loadReports();
+      if (onDataChanged) onDataChanged();
+      setTimeout(() => setLastActionMessage(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Error al descartar el grupo.');
+    } finally {
+      setGroupActionLoadingKey(null);
+    }
+  };
+
   // Crear amenaza manual directamente
   const handleCreateManualThreat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,164 +442,439 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
       {/* TAB 1: REPORTES Y CASOS CIUDADANOS */}
       {activeAdminTab === 'reports' && (
         <div className="space-y-6">
-          {/* Sub-filtro de reportes */}
-          <div className="flex items-center gap-2">
-            {[
-              { id: 'pending', label: 'Pendientes de Aprobación' },
-              { id: 'validated', label: 'Validados' },
-              { id: 'all', label: 'Todos los Casos' },
-            ].map((tab) => (
+          {/* Sub-filtro de reportes y conmutador de Vista Agrupada / Individual */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-white/5">
+            {/* Filtro por estado */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+              {[
+                { id: 'pending', label: 'Pendientes de Aprobación' },
+                { id: 'validated', label: 'Validados' },
+                { id: 'all', label: 'Todos los Casos' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setReportFilter(tab.id as any)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                    reportFilter === tab.id
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Selector de modo de vista: Agrupado por Regex vs Individual */}
+            <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-white/10 self-start md:self-auto">
               <button
-                key={tab.id}
-                onClick={() => setReportFilter(tab.id as any)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  reportFilter === tab.id
-                    ? 'bg-slate-800 text-white border border-indigo-500/50 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                type="button"
+                onClick={() => setViewMode('grouped')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'grouped'
+                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
               >
-                {tab.label}
+                <Layers className="w-3.5 h-3.5" />
+                <span>Vista Agrupada por Amenaza</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
+                  {groupedReports.length}
+                </span>
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => setViewMode('individual')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'individual'
+                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                }`}
+              >
+                <ListFilter className="w-3.5 h-3.5" />
+                <span>Vista Individual</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
+                  {reports.length}
+                </span>
+              </button>
+            </div>
           </div>
 
           {reportsLoading ? (
             <div className="flex justify-center p-16">
               <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
-          ) : reports.length === 0 ? (
-            <div className="glass-panel p-16 text-center text-slate-400 space-y-2">
-              <Clock className="w-10 h-10 mx-auto text-slate-500" />
-              <p className="text-lg font-bold text-slate-200">No hay casos en este estado.</p>
-              <p className="text-sm">Podés enviar uno desde la solapa pública "Reportar Estafa" para probar el flujo de moderación e imágenes.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {reports.map((report) => {
-                const reportImages = parseImages(report.images);
+          ) : viewMode === 'grouped' ? (
+            /* =================== VISTA AGRUPADA POR REGEX =================== */
+            groupedReports.length === 0 ? (
+              <div className="glass-panel p-16 text-center text-slate-400 space-y-2">
+                <Clock className="w-10 h-10 mx-auto text-slate-500" />
+                <p className="text-lg font-bold text-slate-200">No hay grupos de denuncias en este estado.</p>
+                <p className="text-sm">Podés enviar reportes con distintas variantes de números o URLs para ver cómo se agrupan automáticamente.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {groupedReports.map((group) => {
+                  const isExpanded = !!expandedGroupKeys[group.canonical_value];
+                  const isActionLoading = groupActionLoadingKey === group.canonical_value;
 
-                return (
-                  <div
-                    key={report.id}
-                    className="glass-panel p-6 border-white/10 space-y-4 hover:border-white/20 transition-all flex flex-col justify-between"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/5">
-                        <div className="flex items-center gap-2.5">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                            report.status === 'validated'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : report.status === 'rejected'
-                              ? 'bg-slate-800 text-slate-400 border border-white/10'
-                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                          }`}>
-                            {report.status === 'validated' ? 'Validado' : report.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
-                          </span>
-                          <span className="text-xs font-mono text-slate-400">Canal: {report.channel.toUpperCase()}</span>
-                          <span className="text-xs text-slate-500 font-mono">#{report.id}</span>
+                  return (
+                    <div
+                      key={group.canonical_value}
+                      className="glass-panel p-6 sm:p-7 border-white/10 hover:border-indigo-500/30 transition-all space-y-6 shadow-xl relative overflow-hidden"
+                    >
+                      {/* Header del Grupo Canónico */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner flex-shrink-0">
+                            {group.threat_type === 'phone' ? (
+                              <Phone className="w-6 h-6 text-indigo-400" />
+                            ) : (
+                              <Globe className="w-6 h-6 text-emerald-400" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                {group.threat_type === 'phone' ? 'Teléfono Unificado' : 'Dominio / URL Unificado'}
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/10 text-white border border-white/10">
+                                {group.total_reports} {group.total_reports === 1 ? 'denuncia recibida' : 'denuncias agrupadas'}
+                              </span>
+                              {group.pending_reports > 0 && (
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                                  {group.pending_reports} pendiente{group.pending_reports > 1 ? 's' : ''} de validar
+                                </span>
+                              )}
+                              {group.validated_reports > 0 && (
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  {group.validated_reports} ya validada{group.validated_reports > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="text-xl sm:text-2xl font-mono font-black text-white tracking-wide">
+                              {group.canonical_value}
+                            </h3>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          {/* Botón Ver Detalle */}
-                          <button
-                            onClick={() => setViewingItem({ type: 'report', data: report })}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-                            title="Ver detalles e imágenes"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          {/* Botón Editar Caso */}
-                          <button
-                            onClick={() => openEditModal('report', report)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-                            title="Editar caso"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
+                        {/* Canales y Categoría */}
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                          {group.scam_type_name && (
+                            <span className="px-3 py-1 rounded-xl text-xs font-semibold bg-indigo-950/60 text-indigo-200 border border-indigo-800/40">
+                              {group.scam_type_name}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800/80 text-xs font-mono text-slate-300 border border-white/5">
+                            <span className="text-slate-400">Vías:</span>
+                            <span className="font-bold text-white">{group.channels.join(', ').toUpperCase()}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <span className="text-xs text-slate-400 font-medium block">Dato reportado ({report.threat_type}):</span>
-                        <span className="text-xl font-mono font-bold text-white tracking-wide">
-                          {report.threat_value}
-                        </span>
-                      </div>
-
-                      <div className="bg-slate-950/70 p-4 rounded-xl border border-white/5 space-y-2">
-                        <p className="text-xs font-semibold text-slate-400">Descripción del ciudadano:</p>
-                        <p className="text-sm text-slate-200 leading-relaxed line-clamp-3">{report.description}</p>
-                        {report.evidence && (
-                          <p className="text-xs text-indigo-300 italic pt-2 border-t border-white/5">
-                            Evidencia: {report.evidence}
-                          </p>
-                        )}
-                        {report.reviewer_notes && (
-                          <p className="text-xs text-emerald-400 font-medium pt-2 border-t border-white/5">
-                            Nota de moderación: {report.reviewer_notes}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Miniaturas de imágenes si las hay */}
-                      {reportImages.length > 0 && (
-                        <div className="space-y-1.5">
-                          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
-                            <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-                            {reportImages.length} {reportImages.length === 1 ? 'imagen adjunta' : 'imágenes adjuntas'}:
+                      {/* Galería consolidada de imágenes si hay */}
+                      {group.all_images.length > 0 && (
+                        <div className="space-y-2 bg-slate-950/50 p-4 rounded-2xl border border-white/5">
+                          <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4 text-indigo-400" />
+                            Galería consolidada de evidencia ({group.all_images.length} {group.all_images.length === 1 ? 'imagen adjunta' : 'imágenes adjuntas de denunciantes'}):
                           </span>
-                          <div className="flex items-center gap-2 overflow-x-auto py-1">
-                            {reportImages.map((img, idx) => (
+                          <div className="flex items-center gap-3 overflow-x-auto py-1">
+                            {group.all_images.map((img, idx) => (
                               <button
                                 key={idx}
                                 type="button"
                                 onClick={() => setZoomedImage(apiService.getImageUrl(img))}
-                                className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 hover:border-indigo-500 transition-all flex-shrink-0 group relative"
+                                className="w-20 h-20 rounded-xl overflow-hidden border border-white/10 hover:border-indigo-400 transition-all flex-shrink-0 group relative shadow-md"
                               >
                                 <img
                                   src={apiService.getImageUrl(img)}
-                                  alt="Evidencia"
+                                  alt="Evidencia grupo"
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform"
                                 />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <Eye className="w-5 h-5 text-white" />
+                                </div>
                               </button>
                             ))}
                           </div>
                         </div>
                       )}
-                    </div>
 
-                    {/* Botones de acción */}
-                    {report.status === 'pending' && (
-                      <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5">
-                        <button
-                          onClick={() => handleReject(report.id!)}
-                          disabled={actionLoadingId === report.id}
-                          className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-white/10 transition-all flex items-center gap-1.5"
-                        >
-                          <ShieldX className="w-4 h-4 text-slate-400" />
-                          <span>Descartar</span>
-                        </button>
+                      {/* Testimonios y Descripciones consolidadas de las denuncias */}
+                      <div className="space-y-2.5 bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-white/5">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                          Relato de las denuncias ciudadanas ({group.reports.length}):
+                        </span>
+                        <div className="space-y-2">
+                          {group.reports.map((r, rIdx) => (
+                            <div
+                              key={r.id || rIdx}
+                              className="text-xs text-slate-200 border-l-2 border-indigo-500/50 pl-3.5 py-1 space-y-1 bg-white/[0.01] rounded-r-lg"
+                            >
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                                <span className="font-mono text-indigo-300 font-bold">#{r.id}</span>
+                                <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-semibold uppercase text-[10px]">
+                                  {r.channel}
+                                </span>
+                                {r.threat_value !== group.canonical_value && (
+                                  <span className="text-slate-400 font-mono text-[11px]">
+                                    Denunciado como: <strong className="text-amber-300 font-mono">{r.threat_value}</strong>
+                                  </span>
+                                )}
+                                <span className="text-slate-500 font-mono">
+                                  {r.created_at ? new Date(r.created_at).toLocaleString('es-AR') : ''}
+                                </span>
+                                <span className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
+                                  r.status === 'validated' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  r.status === 'rejected' ? 'bg-slate-800 text-slate-400' :
+                                  'bg-amber-500/20 text-amber-300'
+                                }`}>
+                                  {r.status === 'validated' ? 'Validado' : r.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-slate-200 leading-relaxed font-sans">{r.description}</p>
+                              {r.evidence && (
+                                <p className="text-xs text-indigo-300/90 italic">Evidencia: {r.evidence}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
+                      {/* Barra de Acciones del Grupo */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-white/5">
                         <button
-                          onClick={() => handleValidate(report.id!, report.threat_value)}
-                          disabled={actionLoadingId === report.id}
-                          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
+                          type="button"
+                          onClick={() => toggleGroupExpanded(group.canonical_value)}
+                          className="px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-2 self-start transition-all"
                         >
-                          {actionLoadingId === report.id ? (
-                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="w-4 h-4" />
+                              <span>Ocultar desglose individual</span>
+                            </>
                           ) : (
                             <>
-                              <ShieldCheck className="w-4 h-4" />
-                              <span>Aceptar e Incorporar a la Base</span>
+                              <ChevronDown className="w-4 h-4" />
+                              <span>Ver desglose y edición individual ({group.reports.length})</span>
                             </>
                           )}
                         </button>
+
+                        <div className="flex items-center gap-3 justify-end">
+                          {group.pending_reports > 0 ? (
+                            <>
+                              <button
+                                onClick={() => handleRejectGroup(group)}
+                                disabled={isActionLoading}
+                                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-white/10 transition-all flex items-center gap-1.5"
+                              >
+                                <ShieldX className="w-4 h-4 text-slate-400" />
+                                <span>Descartar Grupo</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleValidateGroup(group)}
+                                disabled={isActionLoading}
+                                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-600/25 flex items-center gap-2"
+                              >
+                                {isActionLoading ? (
+                                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="w-4 h-4" />
+                                    <span>Aceptar y Unificar en Base Central ({group.pending_reports} pendientes)</span>
+                                  </>
+                                )}
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Amenaza ya incorporada y sincronizada en base central</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+
+                      {/* Desglose individual colapsable */}
+                      {isExpanded && (
+                        <div className="pt-4 border-t border-white/10 space-y-3 animate-fadeIn">
+                          <span className="text-xs font-bold text-slate-300">
+                            Denuncias individuales que componen este grupo:
+                          </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {group.reports.map((rep) => (
+                              <div
+                                key={rep.id}
+                                className="p-4 rounded-xl bg-slate-900/90 border border-white/10 space-y-2 flex flex-col justify-between"
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                                    <span className="text-xs font-mono font-bold text-white">ID #{rep.id}</span>
+                                    <button
+                                      onClick={() => openEditModal('report', rep)}
+                                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                                      title="Editar caso"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                  <div className="pt-2 text-xs space-y-1">
+                                    <p className="text-slate-400">
+                                      Valor original: <code className="text-amber-300 font-mono">{rep.threat_value}</code>
+                                    </p>
+                                    <p className="text-slate-300 line-clamp-2">"{rep.description}"</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            /* =================== VISTA INDIVIDUAL =================== */
+            reports.length === 0 ? (
+              <div className="glass-panel p-16 text-center text-slate-400 space-y-2">
+                <Clock className="w-10 h-10 mx-auto text-slate-500" />
+                <p className="text-lg font-bold text-slate-200">No hay casos en este estado.</p>
+                <p className="text-sm">Podés enviar uno desde la solapa pública "Reportar Estafa" para probar el flujo de moderación e imágenes.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {reports.map((report) => {
+                  const reportImages = parseImages(report.images);
+
+                  return (
+                    <div
+                      key={report.id}
+                      className="glass-panel p-6 border-white/10 space-y-4 hover:border-white/20 transition-all flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/5">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                              report.status === 'validated'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : report.status === 'rejected'
+                                ? 'bg-slate-800 text-slate-400 border border-white/10'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                            }`}>
+                              {report.status === 'validated' ? 'Validado' : report.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
+                            </span>
+                            <span className="text-xs font-mono text-slate-400">Canal: {report.channel.toUpperCase()}</span>
+                            <span className="text-xs text-slate-500 font-mono">#{report.id}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            {/* Botón Ver Detalle */}
+                            <button
+                              onClick={() => setViewingItem({ type: 'report', data: report })}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                              title="Ver detalles e imágenes"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {/* Botón Editar Caso */}
+                            <button
+                              onClick={() => openEditModal('report', report)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                              title="Editar caso"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-xs text-slate-400 font-medium block">Dato reportado ({report.threat_type}):</span>
+                          <span className="text-xl font-mono font-bold text-white tracking-wide">
+                            {report.threat_value}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950/70 p-4 rounded-xl border border-white/5 space-y-2">
+                          <p className="text-xs font-semibold text-slate-400">Descripción del ciudadano:</p>
+                          <p className="text-sm text-slate-200 leading-relaxed line-clamp-3">{report.description}</p>
+                          {report.evidence && (
+                            <p className="text-xs text-indigo-300 italic pt-2 border-t border-white/5">
+                              Evidencia: {report.evidence}
+                            </p>
+                          )}
+                          {report.reviewer_notes && (
+                            <p className="text-xs text-emerald-400 font-medium pt-2 border-t border-white/5">
+                              Nota de moderación: {report.reviewer_notes}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Miniaturas de imágenes si las hay */}
+                        {reportImages.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                              <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                              {reportImages.length} {reportImages.length === 1 ? 'imagen adjunta' : 'imágenes adjuntas'}:
+                            </span>
+                            <div className="flex items-center gap-2 overflow-x-auto py-1">
+                              {reportImages.map((img, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setZoomedImage(apiService.getImageUrl(img))}
+                                  className="w-14 h-14 rounded-lg overflow-hidden border border-white/10 hover:border-indigo-500 transition-all flex-shrink-0 group relative"
+                                >
+                                  <img
+                                    src={apiService.getImageUrl(img)}
+                                    alt="Evidencia"
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Botones de acción individual */}
+                      {report.status === 'pending' && (
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5">
+                          <button
+                            onClick={() => handleReject(report.id!)}
+                            disabled={actionLoadingId === report.id}
+                            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-white/10 transition-all flex items-center gap-1.5"
+                          >
+                            <ShieldX className="w-4 h-4 text-slate-400" />
+                            <span>Descartar</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleValidate(report.id!, report.threat_value)}
+                            disabled={actionLoadingId === report.id}
+                            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
+                          >
+                            {actionLoadingId === report.id ? (
+                              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                            ) : (
+                              <>
+                                <ShieldCheck className="w-4 h-4" />
+                                <span>Aceptar e Incorporar a la Base</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       )}

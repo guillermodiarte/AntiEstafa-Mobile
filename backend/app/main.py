@@ -10,7 +10,7 @@ from app.models import *  # Asegura carga de todos los modelos
 from app.seeds.seed_data import seed_database
 from app.api.v1.router import api_router
 
-UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
+UPLOAD_DIR = settings.UPLOAD_DIR
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
