@@ -124,7 +124,7 @@ class ThreatInterceptActivity : AppCompatActivity() {
         detectedValue: String,
         category: String,
         signals: String,
-        rawAdvice: String,
+        advice: String,
         originalUrl: String,
         notificationId: Int,
         messageText: String
@@ -165,7 +165,7 @@ class ThreatInterceptActivity : AppCompatActivity() {
         // Adaptar la recomendación según sea mensaje vs llamada
         val resolvedAdvice = when {
             (threatType == TYPE_SMS || threatType == TYPE_WHATSAPP) &&
-            (category.contains("Familiar", ignoreCase = true) || rawAdvice.contains("llamada", ignoreCase = true)) -> {
+            (category.contains("Familiar", ignoreCase = true) || advice.contains("llamada", ignoreCase = true)) -> {
                 "Eliminá el mensaje y no envíes dinero ni respondas. Comunicate con tu familiar llamándolo directamente al número habitual que tengas agendado en tus contactos."
             }
             (threatType == TYPE_SMS || threatType == TYPE_WHATSAPP) &&
@@ -173,11 +173,11 @@ class ThreatInterceptActivity : AppCompatActivity() {
                 "Eliminá el mensaje de inmediato. Ningún banco te pedirá validar cuentas o enviar claves por mensaje."
             }
             threatType == TYPE_SMS || threatType == TYPE_WHATSAPP -> {
-                if (rawAdvice.contains("llamada", ignoreCase = true)) {
+                if (advice.contains("llamada", ignoreCase = true)) {
                     "Eliminá el mensaje y no ingreses a ningún enlace. No compartas códigos ni datos personales."
-                } else rawAdvice
+                } else advice
             }
-            else -> rawAdvice
+            else -> advice
         }
         tvAdvice.text = resolvedAdvice
 
