@@ -133,6 +133,8 @@ class ThreatInterceptActivity : AppCompatActivity() {
     ) {
         val tvRiskBadge = findViewById<TextView>(R.id.tvRiskBadge)
         val tvThreatTypeEmoji = findViewById<TextView>(R.id.tvThreatTypeEmoji)
+        val ivAppLogo = findViewById<android.widget.ImageView>(R.id.ivAppLogo)
+        val tvAppSource = findViewById<TextView>(R.id.tvAppSource)
         val tvThreatTitle = findViewById<TextView>(R.id.tvThreatTitle)
         val tvThreatValue = findViewById<TextView>(R.id.tvThreatValue)
         val cardMessageContent = findViewById<View>(R.id.cardMessageContent)
@@ -247,23 +249,57 @@ class ThreatInterceptActivity : AppCompatActivity() {
             else -> { // SMS o WHATSAPP
                 tvThreatTypeEmoji.text = "💬"
                 tvThreatTitle.text = "Mensaje fraudulento detectado"
-                btnSafeAction.text = "Eliminar mensaje (Recomendado)"
-                btnRiskyAction.text = "Continuar y ver mensaje (No recomendado)"
 
-                // Acción segura: Borrar mensaje y volver a inicio limpio
-                btnSafeAction.setOnClickListener {
-                    deleteSmsMessage(detectedValue, messageText)
-                    clearAllNotifications()
-                    Toast.makeText(this, "Mensaje descartado y alerta eliminada.", Toast.LENGTH_SHORT).show()
-                    goToHomeScreen()
-                    finish()
-                }
+                if (threatType == TYPE_WHATSAPP) {
+                    // Mostrar logo de WhatsApp y etiqueta de origen
+                    tvThreatTypeEmoji.visibility = View.GONE
+                    ivAppLogo.visibility = View.VISIBLE
+                    tvAppSource.text = "Mensaje recibido vía WhatsApp"
+                    tvAppSource.visibility = View.VISIBLE
 
-                // Acción peligrosa: Abrir la app de mensajería (SMS o WhatsApp) para ver el mensaje
-                btnRiskyAction.setOnClickListener {
-                    Toast.makeText(this, "Atención: Nunca compartas códigos ni transfieras dinero", Toast.LENGTH_LONG).show()
-                    openMessagingApp(threatType, detectedValue)
-                    finish()
+                    // WhatsApp no permite eliminar mensajes desde apps externas.
+                    // Guiamos al usuario a abrir WhatsApp y eliminar manualmente.
+                    btnSafeAction.text = "Abrir WhatsApp y eliminar el mensaje (Recomendado)"
+                    btnRiskyAction.text = "Ignorar advertencia y ver el mensaje (No recomendado)"
+
+                    btnSafeAction.setOnClickListener {
+                        clearAllNotifications()
+                        Toast.makeText(
+                            this,
+                            "Abrí la conversación y eliminá el mensaje para ambos",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        openMessagingApp(TYPE_WHATSAPP, detectedValue)
+                        finish()
+                    }
+
+                    btnRiskyAction.setOnClickListener {
+                        Toast.makeText(this, "Atención: Nunca compartas códigos ni transfieras dinero", Toast.LENGTH_LONG).show()
+                        openMessagingApp(TYPE_WHATSAPP, detectedValue)
+                        finish()
+                    }
+
+                } else {
+                    // SMS: podemos intentar eliminar desde content://sms
+                    ivAppLogo.visibility = View.GONE
+                    tvAppSource.visibility = View.GONE
+
+                    btnSafeAction.text = "Eliminar mensaje SMS (Recomendado)"
+                    btnRiskyAction.text = "Continuar y ver mensaje (No recomendado)"
+
+                    btnSafeAction.setOnClickListener {
+                        deleteSmsMessage(detectedValue, messageText)
+                        clearAllNotifications()
+                        Toast.makeText(this, "Mensaje descartado y alerta eliminada.", Toast.LENGTH_SHORT).show()
+                        goToHomeScreen()
+                        finish()
+                    }
+
+                    btnRiskyAction.setOnClickListener {
+                        Toast.makeText(this, "Atención: Nunca compartas códigos ni transfieras dinero", Toast.LENGTH_LONG).show()
+                        openMessagingApp(TYPE_SMS, detectedValue)
+                        finish()
+                    }
                 }
             }
         }

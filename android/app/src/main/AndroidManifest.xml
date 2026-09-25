@@ -104,6 +104,12 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- Pantalla de configuración de la app -->
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EscudoDigital" />
+
     </application>
 
 </manifest>

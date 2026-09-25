@@ -60,14 +60,43 @@
             android:textColor="#FFFFFF"
             android:layout_marginBottom="20dp" />
 
-        <!-- Ícono grande del tipo de amenaza -->
-        <TextView
-            android:id="@+id/tvThreatTypeEmoji"
+        <!-- Ícono grande del tipo de amenaza (emoji o logo de app) -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="⚠️"
-            android:textSize="64sp"
-            android:layout_marginBottom="12dp" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:id="@+id/tvThreatTypeEmoji"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠️"
+                android:textSize="64sp" />
+
+            <!-- Logo de WhatsApp: visible solo cuando la amenaza viene de WhatsApp -->
+            <ImageView
+                android:id="@+id/ivAppLogo"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:src="@drawable/ic_whatsapp"
+                android:visibility="gone"
+                android:contentDescription="WhatsApp" />
+
+            <!-- Etiqueta de origen: ej. 'vía WhatsApp' -->
+            <TextView
+                android:id="@+id/tvAppSource"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#25D366"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginTop="6dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
         <!-- Título principal -->
         <TextView

@@ -20,7 +20,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.escudodigital.R
 import com.escudodigital.core.AlertManager
-import com.escudodigital.core.LocalRiskEngine
 import com.escudodigital.data.local.EscudoDatabase
 import com.escudodigital.data.repository.ThreatRepository
 import com.escudodigital.databinding.ActivityMainBinding
@@ -125,12 +124,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
-        binding.btnSimulateAlert.setOnClickListener {
-            simulateDemoAlert()
+        // Ruedita de configuración
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
+
+        // Botón de permisos: lleva directamente a la configuración pendiente
         binding.btnCheckPermissions.setOnClickListener {
             openPermissionGuide()
         }
+
+        // Tocar la fila de protección web lleva a accesibilidad
         binding.rowBrowserProtection.setOnClickListener {
             Toast.makeText(this, "Activá 'Escudo Digital' para proteger la navegación en Chrome", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -189,6 +193,10 @@ class MainActivity : AppCompatActivity() {
             binding.tvBrowserStatus.setTextColor(
                 getColor(if (a11yEnabled) R.color.shield_active else R.color.shield_warning)
             )
+            // Botón de permisos: visible solo si falta algún permiso
+            val allPermissionsOk = listenerEnabled && a11yEnabled
+            binding.btnCheckPermissions.visibility =
+                if (allPermissionsOk) android.view.View.GONE else android.view.View.VISIBLE
 
             // Estado general
             if (listenerEnabled && a11yEnabled) {
@@ -203,38 +211,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Demo para la presentación del Hackathon.
-     * Simula una notificación de WhatsApp sospechosa del número +5491138901234.
-     */
-    private fun simulateDemoAlert() {
-        lifecycleScope.launch {
-            val db = EscudoDatabase.getInstance(applicationContext)
-            val engine = LocalRiskEngine(db.threatDao(), db.trustedNumberDao())
-
-            val phoneResult = engine.evaluatePhone("+5491138901234")
-
-            val result = if (phoneResult.isMediumOrHigh) {
-                phoneResult
-            } else {
-                engine.evaluateNotificationText(
-                    "Hola mamá, agendá mi nuevo número. Tuve un accidente con el auto " +
-                    "y necesito una transferencia urgente de 80.000 pesos. No le cuentes a nadie todavía."
-                )
-            }
-
-            if (result.isMediumOrHigh) {
-                val intent = Intent(this@MainActivity, AlertDetailActivity::class.java).apply {
-                    putExtra(AlertDetailActivity.EXTRA_RISK_LEVEL, result.level.name)
-                    putExtra(AlertDetailActivity.EXTRA_DETECTED_VALUE, result.detectedValue)
-                    putExtra(AlertDetailActivity.EXTRA_CATEGORY, result.category ?: "Posible Fraude")
-                    putExtra(AlertDetailActivity.EXTRA_SIGNALS, result.signals.joinToString("\n• ", "• "))
-                    putExtra(AlertDetailActivity.EXTRA_ADVICE, result.advice ?: "Consultá a un familiar de confianza.")
-                }
-                startActivity(intent)
-            }
-        }
-    }
 
     private fun openPermissionGuide() {
         if (!isAccessibilityServiceEnabled()) {
