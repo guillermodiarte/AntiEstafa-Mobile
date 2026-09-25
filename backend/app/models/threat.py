@@ -24,6 +24,7 @@ class Threat(Base):
     status = Column(String(20), default="validated", nullable=False, index=True)
     
     scam_type_id = Column(Integer, ForeignKey("scam_types.id"), nullable=True)
+    scam_type_ids = Column(Text, nullable=True)  # JSON array of scam_type IDs, e.g. "[1, 4]"
     report_count = Column(Integer, default=1)
     confidence_score = Column(Float, default=0.9)  # 0.0 to 1.0
     evidence_notes = Column(Text, nullable=True)
@@ -38,3 +39,17 @@ class Threat(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     scam_type = relationship("ScamType", back_populates="threats")
+
+    def get_scam_type_ids_list(self):
+        import json
+        ids = []
+        if self.scam_type_ids:
+            try:
+                ids = json.loads(self.scam_type_ids)
+                if not isinstance(ids, list):
+                    ids = [ids]
+            except Exception:
+                pass
+        if not ids and self.scam_type_id:
+            ids = [self.scam_type_id]
+        return ids

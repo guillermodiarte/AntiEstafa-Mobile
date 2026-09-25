@@ -27,10 +27,11 @@ import {
   Layers,
   ListFilter,
   CheckCheck,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { CitizenReport, ThreatRecord, ScamType, GroupedReport } from '../types';
+import { CitizenReport, ThreatRecord, ScamType, GroupedReport, CaseUpdateItem } from '../types';
 
 interface AdminModerationProps {
   onDataChanged?: () => void;
@@ -38,8 +39,8 @@ interface AdminModerationProps {
 }
 
 export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged, syncVersion }) => {
-  // Main view tab: 'reports' | 'records'
-  const [activeAdminTab, setActiveAdminTab] = useState<'reports' | 'records'>('reports');
+  // Main view tab: 'reports' | 'updates' | 'records'
+  const [activeAdminTab, setActiveAdminTab] = useState<'reports' | 'updates' | 'records'>('reports');
 
   // Reports state
   const [reports, setReports] = useState<CitizenReport[]>([]);
@@ -52,33 +53,46 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<Record<string, boolean>>({});
   const [lastActionMessage, setLastActionMessage] = useState<string | null>(null);
 
+  // Case updates state (actualizaciones de casos existentes)
+  const [caseUpdates, setCaseUpdates] = useState<CaseUpdateItem[]>([]);
+  const [updatesLoading, setUpdatesLoading] = useState(false);
+  const [updateActionLoadingId, setUpdateActionLoadingId] = useState<number | null>(null);
+
   // All records state
   const [threats, setThreats] = useState<ThreatRecord[]>([]);
   const [threatsLoading, setThreatsLoading] = useState(false);
   const [threatSearch, setThreatSearch] = useState('');
   const [threatTypeFilter, setThreatTypeFilter] = useState<string>('all');
   const [threatRiskFilter, setThreatRiskFilter] = useState<string>('all');
+  const [threatImageFilter, setThreatImageFilter] = useState<'all' | 'with_images' | 'without_images'>('all');
 
-  // Modals state: 'view' and 'edit'
+  // Modals state: 'view', 'edit', 'delete', 'quick_images'
   const [viewingItem, setViewingItem] = useState<{ type: 'report' | 'threat'; data: any } | null>(null);
   const [editingItem, setEditingItem] = useState<{ type: 'report' | 'threat'; data: any } | null>(null);
+  const [deletingItem, setDeletingItem] = useState<ThreatRecord | null>(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
+  const [quickImagesModal, setQuickImagesModal] = useState<{ value: string; images: string[] } | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   // Edit form state
   const [editForm, setEditForm] = useState<{
     value: string;
     type: string;
+    attached_url?: string;
     risk_level: string;
     status: string;
     scam_type_id?: number;
+    scam_type_ids: number[];
     description?: string;
     evidence?: string;
     reviewer_notes?: string;
   }>({
     value: '',
     type: 'phone',
+    attached_url: '',
     risk_level: 'high',
-    status: 'pending'
+    status: 'pending',
+    scam_type_ids: []
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -88,6 +102,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
   const [newValue, setNewValue] = useState('');
   const [newRisk, setNewRisk] = useState<'high' | 'medium' | 'low'>('high');
   const [newScamTypeId, setNewScamTypeId] = useState<number | undefined>(undefined);
+  const [newScamTypeIds, setNewScamTypeIds] = useState<number[]>([]);
   const [newEvidence, setNewEvidence] = useState('');
   const [scamTypes, setScamTypes] = useState<ScamType[]>([]);
   const [creatingThreat, setCreatingThreat] = useState(false);
@@ -98,7 +113,10 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
       try {
         const types = await apiService.getScamTypes();
         setScamTypes(types);
-        if (types.length > 0) setNewScamTypeId(types[0].id);
+        if (types.length > 0) {
+          setNewScamTypeId(types[0].id);
+          setNewScamTypeIds([types[0].id]);
+        }
       } catch (e) {
         console.error(e);
       }
@@ -106,7 +124,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     loadMeta();
   }, []);
 
-  // Load citizen reports (individual & grouped)
+  // Load citizen reports (individual & grouped) and updates
   const loadReports = async () => {
     setReportsLoading(true);
     try {
@@ -123,8 +141,21 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     }
   };
 
+  const loadUpdates = async () => {
+    setUpdatesLoading(true);
+    try {
+      const data = await apiService.getCaseUpdates();
+      setCaseUpdates(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdatesLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadReports();
+    loadUpdates();
   }, [reportFilter]);
 
   // Load all threat records
@@ -134,6 +165,8 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
       const params: any = {};
       if (threatTypeFilter !== 'all') params.type = threatTypeFilter;
       if (threatRiskFilter !== 'all') params.risk_level = threatRiskFilter;
+      if (threatImageFilter === 'with_images') params.has_images = true;
+      if (threatImageFilter === 'without_images') params.has_images = false;
       if (threatSearch.trim()) params.q = threatSearch.trim();
 
       const data = await apiService.getThreats(params);
@@ -148,8 +181,10 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
   useEffect(() => {
     if (activeAdminTab === 'records') {
       loadThreats();
+    } else if (activeAdminTab === 'updates') {
+      loadUpdates();
     }
-  }, [activeAdminTab, threatTypeFilter, threatRiskFilter]);
+  }, [activeAdminTab, threatTypeFilter, threatRiskFilter, threatImageFilter]);
 
   // Helper para parsear imágenes de JSON
   const parseImages = (imgStr?: string | null): string[] => {
@@ -164,15 +199,27 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     }
   };
 
-  // Open Edit Modal
+  // Open Edit Modal with multi-modality support
   const openEditModal = (type: 'report' | 'threat', item: any) => {
     setEditingItem({ type, data: item });
+
+    let initialScamIds: number[] = [];
+    if (item.scam_type_ids && Array.isArray(item.scam_type_ids) && item.scam_type_ids.length > 0) {
+      initialScamIds = [...item.scam_type_ids];
+    } else if (item.scam_types && Array.isArray(item.scam_types) && item.scam_types.length > 0) {
+      initialScamIds = item.scam_types.map((st: any) => st.id);
+    } else if (item.scam_type_id) {
+      initialScamIds = [item.scam_type_id];
+    }
+
     setEditForm({
       value: type === 'report' ? item.threat_value : item.value,
       type: type === 'report' ? item.threat_type : item.type,
+      attached_url: type === 'report' ? (item.attached_url || '') : '',
       risk_level: item.risk_level || 'high',
       status: item.status || 'pending',
-      scam_type_id: item.scam_type_id,
+      scam_type_id: initialScamIds[0] || item.scam_type_id,
+      scam_type_ids: initialScamIds,
       description: item.description,
       evidence: item.evidence || item.evidence_notes,
       reviewer_notes: item.reviewer_notes
@@ -186,11 +233,15 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
 
     setSavingEdit(true);
     try {
+      const primaryScamId = editForm.scam_type_ids.length > 0 ? editForm.scam_type_ids[0] : editForm.scam_type_id;
+
       if (editingItem.type === 'report') {
         await apiService.editReport(editingItem.data.id, {
           threat_value: editForm.value,
           threat_type: editForm.type as any,
-          scam_type_id: editForm.scam_type_id,
+          attached_url: editForm.attached_url ? editForm.attached_url.trim() : undefined,
+          scam_type_id: primaryScamId,
+          scam_type_ids: editForm.scam_type_ids,
           description: editForm.description,
           evidence: editForm.evidence,
           status: editForm.status as any,
@@ -198,13 +249,15 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
         });
         setLastActionMessage(`Reporte #${editingItem.data.id} actualizado con éxito.`);
         await loadReports();
+        await loadUpdates();
       } else {
         await apiService.editThreat(editingItem.data.id, {
           value: editForm.value,
           type: editForm.type as any,
           risk_level: editForm.risk_level as any,
           status: editForm.status,
-          scam_type_id: editForm.scam_type_id,
+          scam_type_id: primaryScamId,
+          scam_type_ids: editForm.scam_type_ids,
           evidence_notes: editForm.evidence
         });
         setLastActionMessage(`Amenaza #${editingItem.data.id} modificada. Versión de sync actualizada.`);
@@ -222,16 +275,75 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     }
   };
 
+  // Eliminar amenaza con confirmación
+  const handleDeleteThreat = async () => {
+    if (!deletingItem) return;
+    setDeletingLoading(true);
+    try {
+      await apiService.deleteThreat(deletingItem.id);
+      setLastActionMessage(`Amenaza #${deletingItem.id} (${deletingItem.value}) eliminada exitosamente.`);
+      setDeletingItem(null);
+      await loadThreats();
+      if (onDataChanged) onDataChanged();
+      setTimeout(() => setLastActionMessage(null), 5000);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || 'Error al eliminar amenaza');
+    } finally {
+      setDeletingLoading(false);
+    }
+  };
+
+  // Aceptar y fusionar actualización de caso existente
+  const handleAcceptUpdate = async (reportId: number, threatVal: string) => {
+    setUpdateActionLoadingId(reportId);
+    try {
+      await apiService.acceptCaseUpdate(reportId);
+      setLastActionMessage(`¡Actualización aceptada para "${threatVal}"! Se anexó el comentario, imágenes y modalidades, y se incrementó la versión de sync.`);
+      await loadUpdates();
+      await loadReports();
+      await loadThreats();
+      if (onDataChanged) onDataChanged();
+      setTimeout(() => setLastActionMessage(null), 5000);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || 'Error al aceptar actualización');
+    } finally {
+      setUpdateActionLoadingId(null);
+    }
+  };
+
+  // Descartar actualización de caso existente
+  const handleRejectUpdate = async (reportId: number) => {
+    setUpdateActionLoadingId(reportId);
+    try {
+      await apiService.rejectCaseUpdate(reportId);
+      setLastActionMessage(`Actualización #${reportId} descartada.`);
+      await loadUpdates();
+      await loadReports();
+      setTimeout(() => setLastActionMessage(null), 4000);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || 'Error al descartar actualización');
+    } finally {
+      setUpdateActionLoadingId(null);
+    }
+  };
+
   // Validar reporte ciudadano y subirlo a la base central
-  const handleValidate = async (reportId: number, threatVal: string) => {
+  // Validar reporte ciudadano y subirlo a la base central (incluyendo URL adjunta si existe)
+  const handleValidate = async (reportId: number, threatVal: string, attachedUrl?: string) => {
     setActionLoadingId(reportId);
     try {
       await apiService.updateReportStatus(
         reportId,
         'validated',
-        'Validado por equipo moderador. Incorporado a la base central.'
+        'Validado por equipo moderador. Incorporado a la base central.',
+        true,
+        true
       );
-      setLastActionMessage(`¡Caso "${threatVal}" validado e incorporado con éxito! Se incrementó la versión de sync.`);
+      const extraMsg = attachedUrl ? ` y su enlace web asociado "${attachedUrl}"` : '';
+      setLastActionMessage(`¡Caso "${threatVal}"${extraMsg} validado e incorporado con éxito! Se incrementó la versión de sync.`);
       await loadReports();
       if (activeAdminTab === 'records') await loadThreats();
       if (onDataChanged) onDataChanged();
@@ -273,18 +385,24 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
     }));
   };
 
-  // Validar grupo unificado e incorporar a base central
+  // Validar grupo unificado e incorporar a base central (teléfono + todos los dominios web adjuntos)
   const handleValidateGroup = async (group: GroupedReport) => {
     setGroupActionLoadingKey(group.canonical_value);
     try {
+      const urlsToValidate = (group.attached_urls && group.attached_urls.length > 0)
+        ? group.attached_urls
+        : Array.from(new Set(group.reports.map(r => r.attached_url).filter(Boolean) as string[]));
+
       const res = await apiService.validateGroupedReports({
         canonical_value: group.canonical_value,
         threat_type: group.threat_type,
         scam_type_id: group.scam_type_id || undefined,
         risk_level: 'high',
-        reviewer_notes: `Validado y unificado en bloque (${group.total_reports} denuncias agrupadas).`
+        reviewer_notes: `Validado y unificado en bloque (${group.total_reports} denuncias agrupadas).`,
+        validate_attached_urls: urlsToValidate
       });
-      setLastActionMessage(`¡Amenaza "${group.canonical_value}" validada y unificada! Se consolidaron ${res.validated_count} denuncias y ${res.total_images} imágenes en la base central.`);
+      const extraMsg = res.validated_domains_count > 0 ? ` y ${res.validated_domains_count} enlaces web asociados` : '';
+      setLastActionMessage(`¡Amenaza "${group.canonical_value}"${extraMsg} validada y unificada! Se consolidaron ${res.validated_count} denuncias y ${res.total_images} imágenes en la base central.`);
       await loadReports();
       if (activeAdminTab === 'records') await loadThreats();
       if (onDataChanged) onDataChanged();
@@ -326,13 +444,15 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
 
     setCreatingThreat(true);
     try {
+      const primaryScamId = newScamTypeIds.length > 0 ? newScamTypeIds[0] : newScamTypeId;
       await apiService.createThreat({
         type: newType,
         value: newValue.trim(),
         risk_level: newRisk,
-        scam_type_id: newScamTypeId,
+        scam_type_id: primaryScamId,
+        scam_type_ids: newScamTypeIds,
         evidence_notes: newEvidence.trim() || undefined
-      });
+      } as any);
 
       setLastActionMessage(`¡Nueva amenaza "${newValue}" agregada directamente a la base central!`);
       setNewValue('');
@@ -395,36 +515,54 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
         </div>
       )}
 
-      {/* Main Tabs: Casos Ciudadanos vs. Todos los Registros */}
+      {/* Main Tabs: Casos Ciudadanos vs. Actualizaciones vs. Todos los Registros */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveAdminTab('reports')}
-            className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
               activeAdminTab === 'reports'
                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>Nuevos Casos y Reportes</span>
+            <span>Nuevas Denuncias</span>
             {pendingReportsCount > 0 && (
-              <span className="ml-1.5 px-2 py-0.5 text-xs font-black rounded-full bg-amber-500 text-slate-950">
-                {pendingReportsCount} pendientes
+              <span className="ml-1.5 px-2 py-0.5 text-[11px] font-black rounded-full bg-amber-500 text-slate-950">
+                {pendingReportsCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveAdminTab('updates')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+              activeAdminTab === 'updates'
+                ? 'bg-gradient-to-r from-cyan-600 to-teal-600 text-white shadow-lg shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Actualizaciones de Existentes</span>
+            {caseUpdates.length > 0 && (
+              <span className="ml-1.5 px-2 py-0.5 text-[11px] font-black rounded-full bg-cyan-400 text-slate-950 animate-pulse">
+                {caseUpdates.length}
               </span>
             )}
           </button>
 
           <button
             onClick={() => setActiveAdminTab('records')}
-            className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
               activeAdminTab === 'records'
                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
             }`}
           >
             <Database className="w-4 h-4" />
-            <span>Todos los Registros en Base</span>
+            <span>Base Central de Amenazas</span>
+            <span className="text-[11px] text-slate-400 font-mono">({threats.length})</span>
           </button>
         </div>
 
@@ -442,63 +580,39 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
       {/* TAB 1: REPORTES Y CASOS CIUDADANOS */}
       {activeAdminTab === 'reports' && (
         <div className="space-y-6">
-          {/* Sub-filtro de reportes y conmutador de Vista Agrupada / Individual */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 p-3 rounded-2xl border border-white/5">
-            {/* Filtro por estado */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-              {[
-                { id: 'pending', label: 'Pendientes de Aprobación' },
-                { id: 'validated', label: 'Validados' },
-                { id: 'all', label: 'Todos los Casos' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setReportFilter(tab.id as any)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                    reportFilter === tab.id
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+          {/* Conmutador de Vista Agrupada / Individual */}
+          <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-white/10 self-start">
+            <button
+              type="button"
+              onClick={() => setViewMode('grouped')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'grouped'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Vista Agrupada por Amenaza</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
+                {groupedReports.length}
+              </span>
+            </button>
 
-            {/* Selector de modo de vista: Agrupado por Regex vs Individual */}
-            <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-white/10 self-start md:self-auto">
-              <button
-                type="button"
-                onClick={() => setViewMode('grouped')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  viewMode === 'grouped'
-                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Vista Agrupada por Amenaza</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
-                  {groupedReports.length}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setViewMode('individual')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  viewMode === 'individual'
-                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                }`}
-              >
-                <ListFilter className="w-3.5 h-3.5" />
-                <span>Vista Individual</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
-                  {reports.length}
-                </span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setViewMode('individual')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'individual'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <ListFilter className="w-3.5 h-3.5" />
+              <span>Vista Individual</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-white/20">
+                {reports.length}
+              </span>
+            </button>
           </div>
 
           {reportsLoading ? (
@@ -602,6 +716,42 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                         </div>
                       )}
 
+                      {/* Enlaces y Dominios reportados dentro de los mensajes de este grupo */}
+                      {(() => {
+                        const groupAttached = (group.attached_urls && group.attached_urls.length > 0)
+                          ? group.attached_urls
+                          : Array.from(new Set(group.reports.map(r => r.attached_url).filter(Boolean) as string[]));
+                        if (groupAttached.length === 0) return null;
+
+                        return (
+                          <div className="space-y-2.5 bg-gradient-to-r from-indigo-950/50 via-slate-950/70 to-slate-900/50 p-4 rounded-2xl border border-indigo-500/30">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                                <LinkIcon className="w-4 h-4 text-cyan-400" />
+                                <span>Enlaces / Dominios web reportados en este número ({groupAttached.length}):</span>
+                              </span>
+                              <span className="text-[10px] text-cyan-300 font-semibold bg-cyan-950/80 px-2.5 py-0.5 rounded-full border border-cyan-500/30 self-start sm:self-auto">
+                                Validación e incorporación conjunta como amenaza web
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {groupAttached.map((url, uIdx) => (
+                                <div
+                                  key={uIdx}
+                                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-indigo-500/40 text-xs font-mono text-white shadow-sm"
+                                >
+                                  <Globe className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                                  <span className="font-bold text-cyan-200">{url}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-[11px] text-slate-400 leading-relaxed">
+                              Al validar este grupo, el sistema incorporará el número telefónico y automáticamente registrará también {groupAttached.length === 1 ? 'este enlace' : 'estos enlaces'} en la Base Central de Amenazas para su bloqueo sincronizado.
+                            </p>
+                          </div>
+                        );
+                      })()}
+
                       {/* Testimonios y Descripciones consolidadas de las denuncias */}
                       <div className="space-y-2.5 bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-white/5">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
@@ -621,6 +771,12 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                                 {r.threat_value !== group.canonical_value && (
                                   <span className="text-slate-400 font-mono text-[11px]">
                                     Denunciado como: <strong className="text-amber-300 font-mono">{r.threat_value}</strong>
+                                  </span>
+                                )}
+                                {r.attached_url && (
+                                  <span className="text-cyan-300 font-mono text-[11px] bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30 flex items-center gap-1">
+                                    <LinkIcon className="w-3 h-3 text-cyan-400" />
+                                    <span>Enlace adjunto: <strong>{r.attached_url}</strong></span>
                                   </span>
                                 )}
                                 <span className="text-slate-500 font-mono">
@@ -685,7 +841,12 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                                 ) : (
                                   <>
                                     <ShieldCheck className="w-4 h-4" />
-                                    <span>Aceptar y Unificar en Base Central ({group.pending_reports} pendientes)</span>
+                                    <span>
+                                      Aceptar y Unificar en Base Central ({group.pending_reports} pendientes
+                                      {group.attached_urls && group.attached_urls.length > 0
+                                        ? ` + ${group.attached_urls.length} ${group.attached_urls.length === 1 ? 'enlace' : 'enlaces'}`
+                                        : ''})
+                                    </span>
                                   </>
                                 )}
                               </button>
@@ -726,6 +887,12 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                                     <p className="text-slate-400">
                                       Valor original: <code className="text-amber-300 font-mono">{rep.threat_value}</code>
                                     </p>
+                                    {rep.attached_url && (
+                                      <p className="text-cyan-300 font-mono flex items-center gap-1">
+                                        <LinkIcon className="w-3 h-3 text-cyan-400" />
+                                        <span>Enlace web: <strong>{rep.attached_url}</strong></span>
+                                      </p>
+                                    )}
                                     <p className="text-slate-300 line-clamp-2">"{rep.description}"</p>
                                   </div>
                                 </div>
@@ -800,6 +967,17 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                           </span>
                         </div>
 
+                        {report.attached_url && (
+                          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs">
+                            <LinkIcon className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-slate-300">Enlace sospechoso recibido:</span>
+                              <strong className="font-mono text-cyan-300 bg-slate-900 px-2 py-0.5 rounded border border-white/10">{report.attached_url}</strong>
+                              <span className="text-[10px] text-cyan-400 bg-cyan-900/60 px-1.5 py-0.2 rounded border border-cyan-500/20">Se validará conjuntamente</span>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="bg-slate-950/70 p-4 rounded-xl border border-white/5 space-y-2">
                           <p className="text-xs font-semibold text-slate-400">Descripción del ciudadano:</p>
                           <p className="text-sm text-slate-200 leading-relaxed line-clamp-3">{report.description}</p>
@@ -855,7 +1033,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                           </button>
 
                           <button
-                            onClick={() => handleValidate(report.id!, report.threat_value)}
+                            onClick={() => handleValidate(report.id!, report.threat_value, report.attached_url)}
                             disabled={actionLoadingId === report.id}
                             className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
                           >
@@ -864,7 +1042,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                             ) : (
                               <>
                                 <ShieldCheck className="w-4 h-4" />
-                                <span>Aceptar e Incorporar a la Base</span>
+                                <span>Aceptar e Incorporar a la Base{report.attached_url ? ' (+ Enlace Web)' : ''}</span>
                               </>
                             )}
                           </button>
@@ -879,7 +1057,249 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
         </div>
       )}
 
-      {/* TAB 2: TODOS LOS REGISTROS EN BASE */}
+      {/* TAB 2: ACTUALIZACIONES DE CASOS EXISTENTES */}
+      {activeAdminTab === 'updates' && (
+        <div className="space-y-6">
+          <div className="glass-panel p-5 bg-slate-900/60 border border-cyan-500/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+                <span>Denuncias Ciudadanas sobre Amenazas Ya Existentes</span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                Estas denuncias corresponden a números o sitios que ya se encuentran registrados en la base central.
+                Podés revisarlas para sumar nuevos relatos, evidencias fotográficas y modalidades combinadas al caso original.
+              </p>
+            </div>
+            <button
+              onClick={loadUpdates}
+              disabled={updatesLoading}
+              className="px-3.5 py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 text-xs font-semibold border border-cyan-500/30 flex items-center gap-2 transition-all self-end md:self-auto"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${updatesLoading ? 'animate-spin' : ''}`} />
+              <span>Actualizar Lista</span>
+            </button>
+          </div>
+
+          {updatesLoading ? (
+            <div className="flex justify-center p-16">
+              <div className="w-10 h-10 border-3 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : caseUpdates.length === 0 ? (
+            <div className="glass-panel p-16 text-center text-slate-400 space-y-2">
+              <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-400" />
+              <p className="text-lg font-bold text-slate-200">No hay actualizaciones pendientes para casos existentes.</p>
+              <p className="text-sm">Cuando un ciudadano reporte un número o URL que ya está en la base, aparecerá aquí para enriquecer el caso.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6">
+              {caseUpdates.map((item) => {
+                const report = item.report;
+                const threat = item.existing_threat;
+                const isActionLoading = updateActionLoadingId === report.id;
+                const newImgs = item.new_images || [];
+                const existingImgs = parseImages(threat?.images);
+
+                return (
+                  <div
+                    key={report.id}
+                    className="glass-panel p-6 sm:p-7 border-cyan-500/30 hover:border-cyan-500/50 bg-slate-900/90 transition-all space-y-5 shadow-xl relative overflow-hidden"
+                  >
+                    {/* Header del caso con valor identificador */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5">
+                          {threat?.type === 'phone' && <Phone className="w-3.5 h-3.5" />}
+                          {threat?.type === 'domain' && <Globe className="w-3.5 h-3.5" />}
+                          {threat?.type === 'url' && <LinkIcon className="w-3.5 h-3.5" />}
+                          <span>{threat?.type || report.threat_type}</span>
+                        </span>
+
+                        <span className="text-lg sm:text-xl font-mono font-black text-white">
+                          {threat?.value || report.threat_value}
+                        </span>
+
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          {threat?.risk_level || 'high'}
+                        </span>
+
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 font-mono">
+                          Amenaza Base #{threat?.id} (v{threat?.version})
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Nueva Denuncia #{report.id}: {report.created_at ? new Date(report.created_at).toLocaleDateString() : ''}</span>
+                      </div>
+                    </div>
+
+                    {/* Comparativa: Base Actual vs Nueva Denuncia */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* Lado Izquierdo: Lo que ya tenemos en la base */}
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-white/5 space-y-3">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-white/5">
+                          <span>Estado Actual en Base Central</span>
+                          <span className="text-indigo-400">{threat?.report_count || 1} reportes acumulados</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[11px] text-slate-500 font-semibold block mb-1">Modalidades Registradas:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {threat?.scam_types && threat.scam_types.length > 0 ? (
+                              threat.scam_types.map((st) => (
+                                <span key={st.id} className="px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                  {st.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-800 text-slate-300">
+                                {threat?.scam_type?.name || 'No clasificada'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {threat?.evidence_notes && (
+                          <div>
+                            <span className="text-[11px] text-slate-500 font-semibold block mb-0.5">Notas de evidencia registradas:</span>
+                            <p className="text-xs text-slate-300 italic line-clamp-3 bg-slate-900/60 p-2.5 rounded-lg border border-white/5">
+                              "{threat.evidence_notes}"
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-1 text-xs text-slate-400">
+                          <span>Fotos guardadas: <strong className="text-white">{existingImgs.length}</strong></span>
+                          {existingImgs.length > 0 && (
+                            <button
+                              onClick={() => setQuickImagesModal({ value: threat.value, images: existingImgs })}
+                              className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Ver fotos actuales
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Lado Derecho: Aportes de la Nueva Denuncia */}
+                      <div className="p-4 rounded-xl bg-cyan-950/30 border border-cyan-500/30 space-y-3">
+                        <div className="flex items-center justify-between text-xs font-bold text-cyan-300 uppercase tracking-wider pb-1 border-b border-cyan-500/20">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                            Nuevo Aporte Ciudadano
+                          </span>
+                          <span className="text-[11px] font-mono text-cyan-400">Canal: {report.channel}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[11px] text-slate-400 font-semibold block mb-1">
+                            Modalidades Informadas en esta denuncia:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {report.scam_types && report.scam_types.length > 0 ? (
+                              report.scam_types.map((st) => (
+                                <span
+                                  key={st.id}
+                                  className="px-2 py-0.5 rounded-md text-xs font-bold bg-cyan-500/20 text-cyan-200 border border-cyan-500/40"
+                                >
+                                  {st.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-cyan-500/20 text-cyan-300">
+                                {report.scam_type?.name || 'General'}
+                              </span>
+                            )}
+                            {item.is_new_modality && item.new_modalities.length > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                                + ¡Nueva modalidad detectada! ({item.new_modalities.join(', ')})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {report.description && (
+                          <div>
+                            <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Relato del denunciante:</span>
+                            <p className="text-xs text-slate-200 leading-relaxed bg-slate-900/80 p-2.5 rounded-lg border border-cyan-500/20">
+                              "{report.description}"
+                            </p>
+                          </div>
+                        )}
+
+                        {newImgs.length > 0 && (
+                          <div>
+                            <span className="text-[11px] text-slate-400 font-semibold block mb-1.5">
+                              Nuevas Imágenes de Evidencia Adjuntas ({newImgs.length}):
+                            </span>
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                              {newImgs.map((img, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => setZoomedImage(apiService.getImageUrl(img))}
+                                  className="cursor-pointer group relative w-16 h-16 rounded-lg overflow-hidden border border-cyan-500/40 bg-slate-950 flex-shrink-0"
+                                >
+                                  <img
+                                    src={apiService.getImageUrl(img)}
+                                    alt="Evidencia"
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Acciones de Moderación */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-white/10">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setViewingItem({ type: 'report', data: report })}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Ver reporte completo</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleRejectUpdate(report.id!)}
+                          disabled={isActionLoading}
+                          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/50 hover:text-rose-300 text-slate-300 text-xs font-semibold border border-white/10 transition-all flex items-center gap-1.5"
+                        >
+                          <ShieldX className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Descartar Aporte</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleAcceptUpdate(report.id!, threat?.value || report.threat_value)}
+                          disabled={isActionLoading}
+                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-600/30 flex items-center gap-2"
+                        >
+                          {isActionLoading ? (
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                          ) : (
+                            <>
+                              <CheckCheck className="w-4 h-4" />
+                              <span>Aceptar y Fusionar con Amenaza</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: TODOS LOS REGISTROS EN BASE */}
       {activeAdminTab === 'records' && (
         <div className="space-y-6">
           {/* Formulario colapsable para agregar nueva amenaza manual */}
@@ -940,18 +1360,36 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Modalidad de Estafa</label>
-                  <select
-                    value={newScamTypeId}
-                    onChange={(e) => setNewScamTypeId(Number(e.target.value))}
-                    className="w-full py-2.5 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-sm outline-none focus:border-indigo-500"
-                  >
-                    {scamTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                    Modalidades de Estafa (Múltiples)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-2 rounded-xl bg-slate-950 border border-white/10">
+                    {scamTypes.map((t) => {
+                      const isChecked = newScamTypeIds.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex items-center gap-2 p-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
+                            isChecked ? 'bg-emerald-500/20 text-white font-semibold' : 'text-slate-400 hover:bg-white/5'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              const updated = isChecked
+                                ? newScamTypeIds.filter((id) => id !== t.id)
+                                : [...newScamTypeIds, t.id];
+                              setNewScamTypeIds(updated);
+                              setNewScamTypeId(updated[0] || undefined);
+                            }}
+                            className="rounded border-white/20 text-emerald-600 focus:ring-0"
+                          />
+                          <span className="truncate">{t.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1037,6 +1475,19 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                 </select>
               </div>
 
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 font-medium">Fotos:</span>
+                <select
+                  value={threatImageFilter}
+                  onChange={(e) => setThreatImageFilter(e.target.value as any)}
+                  className="py-1.5 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none"
+                >
+                  <option value="all">Todas</option>
+                  <option value="with_images">Con fotos</option>
+                  <option value="without_images">Sin fotos</option>
+                </select>
+              </div>
+
               <button
                 onClick={loadThreats}
                 className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all"
@@ -1046,7 +1497,7 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
             </div>
           </div>
 
-          {/* Tabla de registros con botones Ver y Editar */}
+          {/* Tabla de registros con botones Ver, Editar, Eliminar y Fotos */}
           {threatsLoading ? (
             <div className="flex justify-center p-16">
               <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -1065,8 +1516,9 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                       <th className="py-3.5 px-4">ID</th>
                       <th className="py-3.5 px-4">Tipo</th>
                       <th className="py-3.5 px-4">Valor Identificador</th>
-                      <th className="py-3.5 px-4">Modalidad</th>
+                      <th className="py-3.5 px-4">Modalidades</th>
                       <th className="py-3.5 px-4">Riesgo</th>
+                      <th className="py-3.5 px-4">Evidencias / Fotos</th>
                       <th className="py-3.5 px-4">Reportes</th>
                       <th className="py-3.5 px-4">Versión Sync</th>
                       <th className="py-3.5 px-4 text-right">Acciones</th>
@@ -1087,8 +1539,23 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                         <td className="py-3 px-4 font-mono font-bold text-white">
                           {t.value}
                         </td>
-                        <td className="py-3 px-4 text-slate-300">
-                          {t.scam_type?.name || 'No clasificada'}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {t.scam_types && t.scam_types.length > 0 ? (
+                              t.scam_types.map((st) => (
+                                <span
+                                  key={st.id}
+                                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 whitespace-nowrap"
+                                >
+                                  {st.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 text-xs">
+                                {t.scam_type?.name || 'No clasificada'}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase ${
@@ -1100,6 +1567,24 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                           }`}>
                             {t.risk_level}
                           </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {(() => {
+                            const imgs = parseImages(t.images);
+                            return imgs.length > 0 ? (
+                              <button
+                                onClick={() => setQuickImagesModal({ value: t.value, images: imgs })}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 transition-all font-semibold"
+                                title="Ver fotos adjuntas"
+                              >
+                                <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>{imgs.length} fotos</span>
+                                <Eye className="w-3 h-3 text-indigo-300 ml-0.5" />
+                              </button>
+                            ) : (
+                              <span className="text-slate-500 text-[11px]">Sin fotos</span>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-200">
                           {t.report_count}
@@ -1122,6 +1607,13 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                               title="Editar registro"
                             >
                               <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingItem(t)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/40 text-slate-300 hover:text-rose-300 transition-colors"
+                              title="Eliminar amenaza"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -1199,6 +1691,21 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
               {viewingItem.data.evidence && (
                 <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-200">
                   <strong>Detalles adicionales de evidencia:</strong> {viewingItem.data.evidence}
+                </div>
+              )}
+
+              {viewingItem.data.attached_url && (
+                <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <Globe className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Enlace web recibido en el mensaje:</span>
+                      <span className="font-mono font-bold text-cyan-200 text-sm">{viewingItem.data.attached_url}</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-cyan-300 font-semibold bg-cyan-900/60 px-2 py-0.5 rounded border border-cyan-500/20">
+                    Se valida como amenaza web
+                  </span>
                 </div>
               )}
 
@@ -1337,19 +1844,41 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Modalidad de Estafa</label>
-                <select
-                  value={editForm.scam_type_id || ''}
-                  onChange={(e) => setEditForm({ ...editForm, scam_type_id: Number(e.target.value) })}
-                  className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500"
-                >
-                  <option value="">Sin clasificar</option>
-                  {scamTypes.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Modalidades de Estafa (Podés seleccionar múltiples)
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2.5 rounded-xl bg-slate-950 border border-white/10">
+                  {scamTypes.map((st) => {
+                    const isChecked = editForm.scam_type_ids.includes(st.id);
+                    return (
+                      <label
+                        key={st.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer transition-colors text-xs ${
+                          isChecked
+                            ? 'bg-indigo-600/25 text-white border border-indigo-500/40 font-semibold'
+                            : 'text-slate-300 hover:bg-white/5 border border-transparent'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            const newIds = isChecked
+                              ? editForm.scam_type_ids.filter((id) => id !== st.id)
+                              : [...editForm.scam_type_ids, st.id];
+                            setEditForm({
+                              ...editForm,
+                              scam_type_ids: newIds,
+                              scam_type_id: newIds[0] || undefined
+                            });
+                          }}
+                          className="rounded border-white/20 text-indigo-600 focus:ring-0"
+                        />
+                        <span>{st.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               {editingItem.type === 'report' && (
@@ -1361,6 +1890,22 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs outline-none focus:border-indigo-500 resize-none"
                   />
+                </div>
+              )}
+
+              {editingItem.type === 'report' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Enlace / Dominio Web Adjunto (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.attached_url || ''}
+                    onChange={(e) => setEditForm({ ...editForm, attached_url: e.target.value })}
+                    placeholder="Ej: santander-falso.com o bit.ly/recupero..."
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 border border-white/10 text-white text-xs font-mono outline-none focus:border-indigo-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Si el denunciante recibió un enlace sospechoso en el mensaje, podés corregirlo o agregarlo acá para que se valide conjuntamente.</p>
                 </div>
               )}
 
@@ -1434,6 +1979,122 @@ export const AdminModeration: React.FC<AdminModerationProps> = ({ onDataChanged,
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: CONFIRMAR ELIMINACIÓN DE AMENAZA */}
+      {deletingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="glass-panel p-6 sm:p-7 border-rose-500/40 bg-slate-900/95 max-w-md w-full space-y-5 shadow-2xl relative">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/30 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Eliminar Amenaza</h3>
+                <p className="text-xs text-slate-400">¿Estás seguro de que deseas eliminar este registro?</p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950/80 border border-white/10 space-y-1">
+              <span className="text-[11px] text-slate-400 font-semibold uppercase">Registro a eliminar:</span>
+              <p className="text-lg font-mono font-bold text-white break-all">{deletingItem.value}</p>
+              <span className="text-xs text-slate-400 capitalize">Tipo: {deletingItem.type} | ID #{deletingItem.id}</span>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Al eliminar este registro, se marcará como dado de baja y se incrementará la versión de sincronización
+              (<strong className="text-emerald-400">v{syncVersion + 1}</strong>) para que todas las aplicaciones móviles
+              lo purguen de sus bases de datos locales.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                disabled={deletingLoading}
+                onClick={() => setDeletingItem(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deletingLoading}
+                onClick={handleDeleteThreat}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/30 flex items-center gap-2"
+              >
+                {deletingLoading ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Sí, Eliminar Registro</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: GALERÍA RÁPIDA DE IMÁGENES */}
+      {quickImagesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="glass-panel p-6 sm:p-7 border-indigo-500/40 bg-slate-900/95 max-w-3xl w-full max-h-[85vh] overflow-y-auto space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+                  <ImageIcon className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <span>Evidencias Fotográficas</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      {quickImagesModal.images.length} {quickImagesModal.images.length === 1 ? 'imagen' : 'imágenes'}
+                    </span>
+                  </h3>
+                  <span className="text-xs font-mono text-slate-400">{quickImagesModal.value}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setQuickImagesModal(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {quickImagesModal.images.map((img, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setZoomedImage(apiService.getImageUrl(img))}
+                  className="cursor-pointer group relative rounded-xl overflow-hidden border border-white/10 bg-slate-950 aspect-square shadow-md"
+                >
+                  <img
+                    src={apiService.getImageUrl(img)}
+                    alt={`Evidencia ${idx + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="text-[11px] font-bold text-white bg-indigo-600/90 px-2 py-1 rounded-md">
+                      Ampliar 🔍
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-3 border-t border-white/10 flex justify-end">
+              <button
+                onClick={() => setQuickImagesModal(null)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

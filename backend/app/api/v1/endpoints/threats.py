@@ -87,35 +87,90 @@ def query_url(url: str = Query(..., description="URL completa a verificar"), db:
     )
 
 
+def _get_scam_types_map(db: Session):
+    all_sts = db.query(ScamType).all()
+    return {st.id: st for st in all_sts}
+
+
+def _enrich_threat(threat: Threat, scam_types_map: dict) -> ThreatRead:
+    import json
+    ids = threat.get_scam_type_ids_list()
+    st_list = [scam_types_map[sid] for sid in ids if sid in scam_types_map]
+    imgs = []
+    if threat.images:
+        try:
+            if threat.images.startswith("["):
+                imgs = json.loads(threat.images)
+            else:
+                imgs = [s.strip() for s in threat.images.split(",") if s.strip()]
+        except Exception:
+            imgs = [threat.images] if threat.images else []
+    
+    return ThreatRead(
+        id=threat.id,
+        type=threat.type,
+        value=threat.value,
+        risk_level=threat.risk_level,
+        status=threat.status,
+        scam_type_id=threat.scam_type_id,
+        scam_type_ids=ids,
+        report_count=threat.report_count,
+        confidence_score=threat.confidence_score,
+        evidence_notes=threat.evidence_notes,
+        images=threat.images,
+        country=threat.country,
+        version=threat.version,
+        is_deleted=threat.is_deleted,
+        created_at=threat.created_at,
+        updated_at=threat.updated_at,
+        scam_type=threat.scam_type,
+        scam_types=st_list,
+        has_images=len(imgs) > 0,
+        images_count=len(imgs)
+    )
+
+
 @router.get("", response_model=List[ThreatRead])
 def list_threats(
     type: Optional[str] = Query(None, description="Filtrar por tipo: phone, domain, url"),
     risk_level: Optional[str] = Query(None, description="Filtrar por nivel de riesgo: low, medium, high"),
+    has_images: Optional[bool] = Query(None, description="Filtrar por presencia de imágenes"),
     q: Optional[str] = Query(None, description="Término de búsqueda"),
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 100,
     db: Session = Depends(get_db)
 ):
     """Lista las amenazas con filtros opcionales (para administración y búsqueda pública)."""
+    from sqlalchemy import or_
     query = db.query(Threat).filter(Threat.is_deleted == False)
     if type:
         query = query.filter(Threat.type == type)
     if risk_level:
         query = query.filter(Threat.risk_level == risk_level)
-    if q:
+    if has_images is True:
+        query = query.filter(Threat.images.isnot(None), Threat.images != "[]", Threat.images != "")
+    elif has_images is False:
+        query = query.filter(or_(Threat.images.is_(None), Threat.images == "[]", Threat.images == ""))
+    if q and isinstance(q, str) and q.strip():
         query = query.filter(Threat.value.contains(q.strip()))
     
-    return query.order_by(Threat.updated_at.desc()).offset(skip).limit(limit).all()
+    threats = query.order_by(Threat.updated_at.desc()).offset(skip).limit(limit).all()
+    sts_map = _get_scam_types_map(db)
+    return [_enrich_threat(t, sts_map) for t in threats]
 
 
 @router.post("", response_model=ThreatRead, status_code=201)
 def create_threat(threat_in: ThreatCreate, db: Session = Depends(get_db)):
     """Crea una amenaza manualmente (panel administrativo)."""
+    import json
     norm_val = threat_in.value
     if threat_in.type == "phone":
         norm_val = normalize_phone(threat_in.value)
     elif threat_in.type == "domain":
         norm_val = normalize_domain(threat_in.value)
+
+    scam_ids = threat_in.scam_type_ids or ([threat_in.scam_type_id] if threat_in.scam_type_id else [])
+    main_scam_id = threat_in.scam_type_id or (scam_ids[0] if scam_ids else None)
 
     new_version = increment_sync_version(db)
     threat = Threat(
@@ -123,10 +178,12 @@ def create_threat(threat_in: ThreatCreate, db: Session = Depends(get_db)):
         value=norm_val,
         risk_level=threat_in.risk_level,
         status=threat_in.status,
-        scam_type_id=threat_in.scam_type_id,
+        scam_type_id=main_scam_id,
+        scam_type_ids=json.dumps(scam_ids) if scam_ids else None,
         report_count=threat_in.report_count,
         confidence_score=threat_in.confidence_score,
         evidence_notes=threat_in.evidence_notes,
+        images=threat_in.images,
         country=threat_in.country,
         version=new_version,
         is_deleted=False
@@ -134,7 +191,8 @@ def create_threat(threat_in: ThreatCreate, db: Session = Depends(get_db)):
     db.add(threat)
     db.commit()
     db.refresh(threat)
-    return threat
+    sts_map = _get_scam_types_map(db)
+    return _enrich_threat(threat, sts_map)
 
 
 @router.get("/{threat_id}", response_model=ThreatRead)
@@ -143,7 +201,8 @@ def get_threat(threat_id: int, db: Session = Depends(get_db)):
     threat = db.query(Threat).filter(Threat.id == threat_id, Threat.is_deleted == False).first()
     if not threat:
         raise HTTPException(status_code=404, detail="Amenaza no encontrada")
-    return threat
+    sts_map = _get_scam_types_map(db)
+    return _enrich_threat(threat, sts_map)
 
 
 @router.patch("/{threat_id}", response_model=ThreatRead)
@@ -156,6 +215,7 @@ def edit_threat(
     Permite editar los datos de una amenaza en la base central (ventana modal de administración).
     Si se modifica un valor relevante, incrementa la versión de sincronización para propagar a los móviles.
     """
+    import json
     threat = db.query(Threat).filter(Threat.id == threat_id, Threat.is_deleted == False).first()
     if not threat:
         raise HTTPException(status_code=404, detail="Amenaza no encontrada")
@@ -180,9 +240,23 @@ def edit_threat(
     if threat_in.status is not None and threat_in.status != threat.status:
         threat.status = threat_in.status
         data_changed = True
-    if threat_in.scam_type_id is not None:
-        threat.scam_type_id = threat_in.scam_type_id
+    
+    # Manejo de múltiples modalidades
+    if threat_in.scam_type_ids is not None:
+        threat.scam_type_ids = json.dumps(threat_in.scam_type_ids)
+        if threat_in.scam_type_ids:
+            threat.scam_type_id = threat_in.scam_type_ids[0]
+        else:
+            threat.scam_type_id = None
         data_changed = True
+    elif threat_in.scam_type_id is not None:
+        threat.scam_type_id = threat_in.scam_type_id
+        current_ids = threat.get_scam_type_ids_list()
+        if threat_in.scam_type_id not in current_ids:
+            current_ids.append(threat_in.scam_type_id)
+        threat.scam_type_ids = json.dumps(current_ids)
+        data_changed = True
+
     if threat_in.report_count is not None:
         threat.report_count = threat_in.report_count
     if threat_in.confidence_score is not None:
@@ -200,4 +274,26 @@ def edit_threat(
 
     db.commit()
     db.refresh(threat)
-    return threat
+    sts_map = _get_scam_types_map(db)
+    return _enrich_threat(threat, sts_map)
+
+
+@router.delete("/{threat_id}", status_code=200)
+def delete_threat(threat_id: int, db: Session = Depends(get_db)):
+    """
+    Elimina (soft-delete) una amenaza de la base central.
+    Incrementa la versión de sincronización para que la baja impacte en los dispositivos móviles.
+    """
+    threat = db.query(Threat).filter(Threat.id == threat_id, Threat.is_deleted == False).first()
+    if not threat:
+        raise HTTPException(status_code=404, detail="Amenaza no encontrada")
+    
+    threat.is_deleted = True
+    new_version = increment_sync_version(db)
+    threat.version = new_version
+    db.commit()
+    return {
+        "message": f"Amenaza #{threat_id} eliminada exitosamente.",
+        "id": threat_id,
+        "sync_version": new_version
+    }

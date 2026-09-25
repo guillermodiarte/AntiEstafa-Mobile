@@ -30,18 +30,25 @@ def mobile_sync(
     total_changes = changes_query.count()
     threats = changes_query.limit(limit).all()
 
-    items = [
-        SyncItem(
-            id=t.id,
-            type=t.type,
-            value=t.value,
-            risk_level=t.risk_level,
-            category=t.scam_type.name if t.scam_type else None,
-            version=t.version,
-            is_deleted=t.is_deleted
+    from app.models.scam_type import ScamType
+    sts_map = {st.id: st for st in db.query(ScamType).all()}
+
+    items = []
+    for t in threats:
+        s_ids = t.get_scam_type_ids_list()
+        cat_names = [sts_map[sid].name for sid in s_ids if sid in sts_map]
+        cat_str = " / ".join(cat_names) if cat_names else (t.scam_type.name if t.scam_type else None)
+        items.append(
+            SyncItem(
+                id=t.id,
+                type=t.type,
+                value=t.value,
+                risk_level=t.risk_level,
+                category=cat_str,
+                version=t.version,
+                is_deleted=t.is_deleted
+            )
         )
-        for t in threats
-    ]
 
     return SyncResponse(
         current_version=current_version,

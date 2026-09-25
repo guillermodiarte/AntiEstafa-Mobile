@@ -33,6 +33,36 @@ async def lifespan(app: FastAPI):
         except Exception:
             db.rollback()
 
+        try:
+            db.execute(text("ALTER TABLE threats ADD COLUMN scam_type_ids TEXT"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("ALTER TABLE reports ADD COLUMN scam_type_ids TEXT"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("ALTER TABLE reports ADD COLUMN existing_threat_id INTEGER"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("ALTER TABLE reports ADD COLUMN is_update BOOLEAN DEFAULT 0"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        try:
+            db.execute(text("ALTER TABLE reports ADD COLUMN attached_url TEXT"))
+            db.commit()
+        except Exception:
+            db.rollback()
+
         seed_database(db)
     finally:
         db.close()

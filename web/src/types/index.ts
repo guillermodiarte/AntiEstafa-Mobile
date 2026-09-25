@@ -39,13 +39,21 @@ export interface CitizenReport {
   description: string;
   evidence?: string;
   images?: string; // JSON string array of URLs
+  attached_url?: string; // Enlace o sitio web opcional adjunto en SMS/llamada/WhatsApp
   scam_type_id?: number;
+  scam_type_ids?: number[];
   country?: string;
   status?: ThreatStatus;
   created_at?: string;
   reviewed_at?: string;
   reviewer_notes?: string;
   scam_type?: ScamType;
+  scam_types?: ScamType[];
+  existing_threat_id?: number;
+  is_update?: boolean;
+  already_in_database?: boolean;
+  existing_threat_value?: string;
+  existing_threat_modalities?: string[];
 }
 
 export interface CaptchaChallenge {
@@ -66,6 +74,7 @@ export interface ThreatRecord {
   risk_level: RiskLevel;
   status: string;
   scam_type_id?: number;
+  scam_type_ids?: number[];
   report_count: number;
   confidence_score: number;
   evidence_notes?: string;
@@ -75,6 +84,9 @@ export interface ThreatRecord {
   created_at: string;
   updated_at?: string;
   scam_type?: ScamType;
+  scam_types?: ScamType[];
+  has_images?: boolean;
+  images_count?: number;
 }
 
 export interface SystemStats {
@@ -98,10 +110,26 @@ export interface GroupedReport {
   rejected_reports: number;
   channels: string[];
   all_images: string[];
+  attached_urls?: string[];
   sample_descriptions: string[];
   scam_type_id?: number | null;
+  scam_type_ids?: number[];
   scam_type_name?: string | null;
+  scam_types?: ScamType[];
   latest_created_at: string;
   report_ids: number[];
   reports: CitizenReport[];
+  is_existing_threat?: boolean;
+  existing_threat_id?: number;
+  existing_threat_modalities?: string[];
+}
+
+export interface CaseUpdateItem {
+  report: CitizenReport;
+  existing_threat: ThreatRecord;
+  is_new_modality: boolean;
+  new_modalities: string[];
+  new_images: string[];
+  new_images_count: number;
+  has_new_images: boolean;
 }

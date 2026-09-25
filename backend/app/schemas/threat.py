@@ -10,6 +10,7 @@ class ThreatBase(BaseModel):
     risk_level: str = "high"  # 'low', 'medium', 'high'
     status: str = "validated"  # 'pending', 'in_review', 'validated', 'rejected'
     scam_type_id: Optional[int] = None
+    scam_type_ids: Optional[list[int]] = None
     report_count: int = 1
     confidence_score: float = 0.9
     evidence_notes: Optional[str] = None
@@ -27,6 +28,7 @@ class ThreatUpdate(BaseModel):
     risk_level: Optional[str] = None
     status: Optional[str] = None
     scam_type_id: Optional[int] = None
+    scam_type_ids: Optional[list[int]] = None
     report_count: Optional[int] = None
     confidence_score: Optional[float] = None
     evidence_notes: Optional[str] = None
@@ -41,6 +43,9 @@ class ThreatRead(ThreatBase):
     created_at: datetime
     updated_at: datetime
     scam_type: Optional[ScamTypeRead] = None
+    scam_types: list[ScamTypeRead] = []
+    has_images: bool = False
+    images_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

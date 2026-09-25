@@ -175,7 +175,8 @@ export const apiService = {
     id: number,
     status: string,
     reviewerNotes: string = '',
-    createOrUpdateThreat: boolean = true
+    createOrUpdateThreat: boolean = true,
+    validateAttachedUrl: boolean = true
   ): Promise<CitizenReport> {
     const res = await fetch(`${API_BASE}/reports/${id}/status`, {
       method: 'PATCH',
@@ -183,7 +184,8 @@ export const apiService = {
       body: JSON.stringify({
         status,
         reviewer_notes: reviewerNotes,
-        create_or_update_threat: createOrUpdateThreat
+        create_or_update_threat: createOrUpdateThreat,
+        validate_attached_url: validateAttachedUrl
       })
     });
     if (!res.ok) {
@@ -193,10 +195,16 @@ export const apiService = {
   },
 
   // 9. Listar todas las amenazas registradas (Admin)
-  async getThreats(params?: { type?: string; risk_level?: string; q?: string }): Promise<ThreatRecord[]> {
+  async getThreats(params?: {
+    type?: string;
+    risk_level?: string;
+    has_images?: boolean;
+    q?: string;
+  }): Promise<ThreatRecord[]> {
     const searchParams = new URLSearchParams();
-    if (params?.type) searchParams.append('type', params.type);
-    if (params?.risk_level) searchParams.append('risk_level', params.risk_level);
+    if (params?.type && params.type !== 'all') searchParams.append('type', params.type);
+    if (params?.risk_level && params.risk_level !== 'all') searchParams.append('risk_level', params.risk_level);
+    if (params?.has_images !== undefined) searchParams.append('has_images', String(params.has_images));
     if (params?.q) searchParams.append('q', params.q);
     const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
     return fetchWithFallback<ThreatRecord[]>(`${API_BASE}/threats${qs}`, undefined, []);
@@ -312,6 +320,7 @@ export const apiService = {
     risk_level?: string;
     reviewer_notes?: string;
     report_ids?: number[];
+    validate_attached_urls?: string[];
   }): Promise<any> {
     const res = await fetch(`${API_BASE}/reports/group/validate`, {
       method: 'POST',
@@ -340,6 +349,50 @@ export const apiService = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Error al descartar grupo: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 19. Eliminar amenaza de base central (soft delete sincronizado con Room)
+  async deleteThreat(id: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/threats/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Error al eliminar amenaza #${id}: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 20. Obtener reportes de actualización para casos existentes
+  async getCaseUpdates(): Promise<any[]> {
+    return fetchWithFallback<any[]>(`${API_BASE}/reports/updates`, undefined, []);
+  },
+
+  // 21. Aceptar y fusionar actualización en amenaza existente
+  async acceptCaseUpdate(reportId: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/reports/${reportId}/accept-update`, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Error al aplicar actualización: ${res.status}`);
+    }
+    return await res.json();
+  },
+
+  // 22. Descartar actualización de caso existente
+  async rejectCaseUpdate(reportId: number, notes?: string): Promise<any> {
+    const url = notes
+      ? `${API_BASE}/reports/${reportId}/reject-update?notes=${encodeURIComponent(notes)}`
+      : `${API_BASE}/reports/${reportId}/reject-update`;
+    const res = await fetch(url, {
+      method: 'POST'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Error al descartar actualización: ${res.status}`);
     }
     return await res.json();
   }

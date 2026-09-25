@@ -16,7 +16,8 @@ import {
   HelpCircle,
   Check,
   AlertTriangle,
-  Info
+  Info,
+  Link2
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { ScamType, CitizenReport, CaptchaChallenge } from '../types';
@@ -97,6 +98,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
   const [channel, setChannel] = useState<'whatsapp' | 'sms' | 'call' | 'web'>('whatsapp');
   const [threatType, setThreatType] = useState<'phone' | 'domain' | 'url'>('phone');
   const [threatValue, setThreatValue] = useState('');
+  const [attachedUrl, setAttachedUrl] = useState(''); // Enlace opcional recibido en SMS/WhatsApp
   const [description, setDescription] = useState('');
   const [evidence, setEvidence] = useState('');
   const [scamTypeId, setScamTypeId] = useState<number | undefined>(undefined);
@@ -121,8 +123,15 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
   const [submitting, setSubmitting] = useState(false);
   const [submittedReport, setSubmittedReport] = useState<CitizenReport | null>(null);
 
-  // Validación en tiempo real del dato sospechoso
-  const validationResult = validateThreatInput(threatType, threatValue);
+  const isPhoneChannel = channel === 'call' || channel === 'whatsapp' || channel === 'sms';
+
+  // Validación en tiempo real del dato principal
+  const validationResult = validateThreatInput(isPhoneChannel ? 'phone' : threatType, threatValue);
+
+  // Validación en tiempo real del enlace opcional adjunto
+  const attachedUrlValidation = attachedUrl.trim()
+    ? validateThreatInput('domain', attachedUrl)
+    : { isValid: true, error: null };
 
   // Load scam types and initial anti-bot challenge
   const loadCaptcha = async () => {
@@ -138,7 +147,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
       setCaptcha({
         token: `local:${n1 + n2}`,
         question: `¿Cuánto es ${n1} + ${n2}?`,
-        expires_in: 900
+        expires_in: 300
       });
     } finally {
       setCaptchaLoading(false);
@@ -151,7 +160,6 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
         const types = await apiService.getScamTypes();
         setScamTypes(types);
         if (types.length > 0) {
-          // Seleccionar el primer tipo por defecto
           setScamTypeId(types[0].id);
         }
       } catch (e) {
@@ -205,20 +213,34 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
 
     // 2. Verificación de campos obligatorios
     if (!threatValue.trim()) {
-      setFormError("Por favor ingresá el número o enlace sospechoso.");
+      setFormError(isPhoneChannel ? "Por favor ingresá el número telefónico sospechoso." : "Por favor ingresá el dominio o enlace web sospechoso.");
       return;
     }
 
     // 3. Validación estricta del dato según su tipo (teléfono vs dominio/url)
-    const valCheck = validateThreatInput(threatType, threatValue);
+    const effectiveThreatType = isPhoneChannel ? 'phone' : threatType;
+    const valCheck = validateThreatInput(effectiveThreatType, threatValue);
     if (!valCheck.isValid && valCheck.error) {
       setFormError(valCheck.error);
       return;
     }
 
-    // 4. Si eligió "Otro", verificar que haya detallado qué tipo de engaño fue
+    // 4. Validación de enlace opcional recibido en el mensaje
+    if (isPhoneChannel && attachedUrl.trim()) {
+      const urlCheck = validateThreatInput('domain', attachedUrl);
+      if (!urlCheck.isValid && urlCheck.error) {
+        setFormError(`Enlace web adjunto: ${urlCheck.error}`);
+        return;
+      }
+    }
+
+    // 5. Verificación de modalidad de engaño
     if (isOtherScamType && !otherScamDetail.trim()) {
       setFormError("Por favor detallá brevemente qué tipo de engaño intentaron hacerte en el campo 'Otro'.");
+      return;
+    }
+    if (!isOtherScamType && !scamTypeId) {
+      setFormError("Por favor seleccioná la modalidad del engaño.");
       return;
     }
 
@@ -227,7 +249,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
       return;
     }
 
-    // 5. Verificación de desafío anti-bot
+    // 6. Verificación de desafío anti-bot
     if (!captchaAnswer.trim()) {
       setFormError("Por favor resolvé la pregunta de seguridad anti-robot para continuar.");
       return;
@@ -247,19 +269,24 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
       let finalDesc = description.trim();
 
       if (isOtherScamType) {
-        const otroCat = scamTypes.find(st => st.slug === 'otro');
-        finalScamTypeId = otroCat ? otroCat.id : undefined;
+        const otroCat = scamTypes.find(st => st.slug === 'otro' || st.name.toLowerCase().includes('otro'));
+        if (otroCat) {
+          finalScamTypeId = otroCat.id;
+        }
         finalDesc = `[Modalidad específica: ${otherScamDetail.trim()}]\n\n${finalDesc}`;
       }
+      const finalScamTypeIds = finalScamTypeId ? [finalScamTypeId] : [];
 
       const newReport = await apiService.submitReport({
         channel,
-        threat_type: threatType,
+        threat_type: effectiveThreatType,
         threat_value: threatValue.trim(),
+        attached_url: (isPhoneChannel && attachedUrl.trim()) ? attachedUrl.trim() : undefined,
         description: finalDesc,
         evidence: evidence.trim() || undefined,
         images: uploadedImageUrls.length > 0 ? JSON.stringify(uploadedImageUrls) : undefined,
         scam_type_id: finalScamTypeId,
+        scam_type_ids: finalScamTypeIds,
         country: 'AR',
         // Anti-bot payload
         captcha_token: captcha?.token,
@@ -269,6 +296,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
 
       setSubmittedReport(newReport);
       setThreatValue('');
+      setAttachedUrl('');
       setDescription('');
       setEvidence('');
       setOtherScamDetail('');
@@ -311,15 +339,46 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
       </div>
 
       {submittedReport ? (
-        <div className="glass-panel p-8 sm:p-12 text-center space-y-6 border-emerald-500/30 bg-emerald-950/20 shadow-2xl max-w-3xl mx-auto">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
-            <CheckCircle2 className="w-10 h-10" />
+        <div className={`glass-panel p-8 sm:p-12 text-center space-y-6 shadow-2xl max-w-3xl mx-auto ${
+          submittedReport.already_in_database
+            ? 'border-cyan-500/40 bg-gradient-to-b from-cyan-950/20 to-slate-900/90 shadow-cyan-500/10'
+            : 'border-emerald-500/30 bg-emerald-950/20 shadow-emerald-500/10'
+        }`}>
+          <div className={`w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto shadow-lg ${
+            submittedReport.already_in_database
+              ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-cyan-500/20'
+              : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-emerald-500/10'
+          }`}>
+            {submittedReport.already_in_database ? <ShieldCheck className="w-10 h-10" /> : <CheckCircle2 className="w-10 h-10" />}
           </div>
-          <div className="space-y-2">
-            <h3 className="text-2xl sm:text-3xl font-black text-white">¡Gracias por tu reporte!</h3>
-            <p className="text-slate-300 text-sm sm:text-base max-w-md mx-auto">
-              El reporte para <strong className="text-white font-mono">{submittedReport.threat_value}</strong> quedó registrado con el código <span className="font-mono text-emerald-400 font-bold">#{submittedReport.id}</span> en estado <strong className="text-amber-400">Pendiente de Moderación</strong>.
-            </p>
+          <div className="space-y-3">
+            <h3 className="text-2xl sm:text-3xl font-black text-white">
+              {submittedReport.already_in_database 
+                ? '¡Número / Enlace ya identificado en el sistema!' 
+                : '¡Gracias por tu reporte!'}
+            </h3>
+
+            {submittedReport.already_in_database ? (
+              <div className="p-5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-slate-200 text-sm max-w-xl mx-auto space-y-3 text-left">
+                <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                  <Info className="w-5 h-5 flex-shrink-0 text-cyan-400" />
+                  <span>Quedate tranquilo/a: Este dato ya se encuentra registrado y bajo alerta.</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  El número o enlace <strong className="text-white font-mono">{submittedReport.threat_value}</strong> <strong>ya forma parte de nuestra base de datos comunitaria</strong> y se encuentra alertado / bloqueado en los dispositivos móviles protegidos por Escudo Digital.
+                </p>
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1 text-xs text-slate-300">
+                  <span className="font-semibold text-emerald-400 block">¿Por qué nos sirve tu aporte?</span>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Tu reporte <span className="font-mono font-bold text-white">#{submittedReport.id}</span> ingresó al canal de <strong>Actualizaciones de Casos Existentes</strong>. El equipo moderador utilizará tus comentarios, nuevas modalidades reportadas y capturas adjuntas para enriquecer el expediente y desenmascarar nuevas tácticas de los mismos atacantes.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-300 text-sm sm:text-base max-w-md mx-auto">
+                El reporte para <strong className="text-white font-mono">{submittedReport.threat_value}</strong> quedó registrado con el código <span className="font-mono text-emerald-400 font-bold">#{submittedReport.id}</span> en estado <strong className="text-amber-400">Pendiente de Moderación</strong>.
+              </p>
+            )}
           </div>
 
           <div className="p-5 bg-slate-900/90 rounded-2xl text-xs text-slate-300 text-left space-y-2 border border-white/5 max-w-xl mx-auto">
@@ -328,7 +387,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
               ¿Qué ocurre ahora con tu reporte?
             </span>
             <p>1. El equipo de moderadores verifica la evidencia fotográfica y el relato ingresado.</p>
-            <p>2. Al validarse, se agrupa de forma inteligente con otros reportes del mismo número o sitio y se incorpora a la base comunitaria central.</p>
+            <p>2. Al validarse, se consolida con el registro central y se actualizan todas las modalidades asociadas.</p>
             <p>3. Los teléfonos Android con la app móvil sincronizan automáticamente el registro para bloquear llamadas y mensajes sospechosos.</p>
           </div>
 
@@ -412,97 +471,196 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
               </div>
 
               {/* Paso 2: Tipo de dato y Valor con Validación en Vivo */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs">2</span>
                   <span>Dato sospechoso a reportar</span>
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-5">
-                    <select
-                      value={threatType}
-                      onChange={(e) => setThreatType(e.target.value as any)}
-                      className="w-full py-3 px-3 rounded-xl bg-slate-950 border border-white/15 text-white text-sm outline-none focus:border-indigo-500 transition-colors"
-                    >
-                      <option value="phone">Número de Teléfono</option>
-                      <option value="domain">Dominio Web (Ej: webfalsa.com)</option>
-                      <option value="url">Enlace o URL Completa</option>
-                    </select>
-                  </div>
+                {isPhoneChannel ? (
+                  /* Canales telefónicos (WhatsApp, Llamada, SMS): SOLO número telefónico */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-4 flex items-center gap-2 py-3 px-3.5 rounded-xl bg-slate-950 border border-white/15 text-white text-xs sm:text-sm font-semibold">
+                        <PhoneCall className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                        <span className="truncate">Línea Telefónica</span>
+                      </div>
 
-                  <div className="sm:col-span-7">
-                    <div className="relative">
-                      <input
-                        id="threat-value-input"
-                        type="text"
-                        required
-                        value={threatValue}
-                        onChange={(e) => setThreatValue(e.target.value)}
-                        placeholder={
-                          threatType === 'phone'
-                            ? 'Ej: +54 9 351 314-6924 o 3513146924'
-                            : 'Ej: webfalsa.com o https://webfalsa.com/algo'
-                        }
-                        className={`w-full py-3 pl-3.5 pr-10 rounded-xl bg-slate-950 border text-white placeholder-slate-500 text-sm font-mono outline-none transition-colors ${
-                          threatValue.trim().length > 0
-                            ? validationResult.isValid
-                              ? 'border-emerald-500/60 focus:border-emerald-500'
-                              : 'border-rose-500/70 focus:border-rose-500 bg-rose-950/10'
-                            : 'border-white/15 focus:border-indigo-500'
-                        }`}
-                      />
-                      {threatValue.trim().length > 0 && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          {validationResult.isValid ? (
-                            <Check className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <AlertTriangle className="w-4 h-4 text-rose-400" />
+                      <div className="sm:col-span-8">
+                        <div className="relative">
+                          <input
+                            id="threat-value-input"
+                            type="text"
+                            required
+                            value={threatValue}
+                            onChange={(e) => setThreatValue(e.target.value)}
+                            placeholder="Ej: +54 9 351 314-6924 o 3513146924"
+                            className={`w-full py-3 pl-3.5 pr-10 rounded-xl bg-slate-950 border text-white placeholder-slate-500 text-sm font-mono outline-none transition-colors ${
+                              threatValue.trim().length > 0
+                                ? validationResult.isValid
+                                  ? 'border-emerald-500/60 focus:border-emerald-500'
+                                  : 'border-rose-500/70 focus:border-rose-500 bg-rose-950/10'
+                                : 'border-white/15 focus:border-indigo-500'
+                            }`}
+                          />
+                          {threatValue.trim().length > 0 && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {validationResult.isValid ? (
+                                <Check className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-rose-400" />
+                              )}
+                            </div>
                           )}
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Validación en vivo del número */}
+                    {threatValue.trim().length > 0 && !validationResult.isValid && validationResult.error && (
+                      <p className="text-xs text-rose-400 flex items-center gap-1.5 pt-0.5 animate-fadeIn">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>{validationResult.error}</span>
+                      </p>
+                    )}
+                    {threatValue.trim().length > 0 && validationResult.isValid && (
+                      <p className="text-xs text-emerald-400 flex items-center gap-1.5 pt-0.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Formato numérico válido (se unificará automáticamente con sus variantes).</span>
+                      </p>
+                    )}
+
+                    {/* Campo extra opcional para agregar un enlace/dominio recibido en el mensaje */}
+                    <div className="space-y-1.5 pt-3 border-t border-white/5 animate-fadeIn">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                          <Link2 className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Enlace o dominio web recibido en el mensaje:</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400 bg-slate-800/90 px-2 py-0.5 rounded-full border border-white/5 font-mono">
+                          Opcional
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={attachedUrl}
+                          onChange={(e) => setAttachedUrl(e.target.value)}
+                          placeholder="Ej: santander-seguro.com o bit.ly/recupero..."
+                          className={`w-full py-2.5 pl-3.5 pr-10 rounded-xl bg-slate-950 border text-white placeholder-slate-500 text-xs sm:text-sm font-mono outline-none transition-colors ${
+                            attachedUrl.trim().length > 0
+                              ? attachedUrlValidation.isValid
+                                ? 'border-emerald-500/60 focus:border-emerald-500'
+                                : 'border-rose-500/70 focus:border-rose-500 bg-rose-950/10'
+                              : 'border-white/10 focus:border-indigo-500'
+                          }`}
+                        />
+                        {attachedUrl.trim().length > 0 && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            {attachedUrlValidation.isValid ? (
+                              <Check className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <AlertTriangle className="w-4 h-4 text-rose-400" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {attachedUrl.trim().length > 0 && !attachedUrlValidation.isValid && attachedUrlValidation.error && (
+                        <p className="text-xs text-rose-400 flex items-center gap-1.5 pt-0.5 animate-fadeIn">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>{attachedUrlValidation.error}</span>
+                        </p>
                       )}
+                      {attachedUrl.trim().length > 0 && attachedUrlValidation.isValid && (
+                        <p className="text-[11px] text-emerald-400 flex items-center gap-1 pt-0.5">
+                          <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                          <span>Dirección web válida: moderación validará tanto el teléfono como este sitio para su protección conjunta.</span>
+                        </p>
+                      )}
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Si dentro del SMS o WhatsApp te enviaron un enlace o dirección web para ingresar, escribilo acá para que sea bloqueado junto al número.
+                      </p>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  /* Canal Sitio Web / Redes: SOLO dominio o enlace web unificado */
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-4 flex items-center gap-2 py-3 px-3.5 rounded-xl bg-slate-950 border border-white/15 text-white text-xs sm:text-sm font-semibold">
+                        <Globe className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                        <span className="truncate">Dominio o Enlace Web</span>
+                      </div>
 
-                {/* Mensaje de validación en tiempo real debajo del campo */}
-                {threatValue.trim().length > 0 && !validationResult.isValid && validationResult.error && (
-                  <p className="text-xs text-rose-400 flex items-center gap-1.5 pt-0.5 animate-fadeIn">
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{validationResult.error}</span>
-                  </p>
-                )}
-                {threatValue.trim().length > 0 && validationResult.isValid && (
-                  <p className="text-xs text-emerald-400 flex items-center gap-1.5 pt-0.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>
-                      {threatType === 'phone'
-                        ? 'Formato numérico válido (se unificará automáticamente con sus variantes).'
-                        : 'Formato web válido (se agrupará con todas las rutas del mismo dominio).'}
-                    </span>
-                  </p>
+                      <div className="sm:col-span-8">
+                        <div className="relative">
+                          <input
+                            id="threat-value-input"
+                            type="text"
+                            required
+                            value={threatValue}
+                            onChange={(e) => setThreatValue(e.target.value)}
+                            placeholder="Ej: webfalsa.com o https://webfalsa.com/login"
+                            className={`w-full py-3 pl-3.5 pr-10 rounded-xl bg-slate-950 border text-white placeholder-slate-500 text-sm font-mono outline-none transition-colors ${
+                              threatValue.trim().length > 0
+                                ? validationResult.isValid
+                                  ? 'border-emerald-500/60 focus:border-emerald-500'
+                                  : 'border-rose-500/70 focus:border-rose-500 bg-rose-950/10'
+                                : 'border-white/15 focus:border-indigo-500'
+                            }`}
+                          />
+                          {threatValue.trim().length > 0 && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {validationResult.isValid ? (
+                                <Check className="w-4 h-4 text-emerald-400" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-rose-400" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Validación en vivo del dominio / enlace web */}
+                    {threatValue.trim().length > 0 && !validationResult.isValid && validationResult.error && (
+                      <p className="text-xs text-rose-400 flex items-center gap-1.5 pt-0.5 animate-fadeIn">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>{validationResult.error}</span>
+                      </p>
+                    )}
+                    {threatValue.trim().length > 0 && validationResult.isValid && (
+                      <p className="text-xs text-emerald-400 flex items-center gap-1.5 pt-0.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>Formato web válido (se agrupará con todas las rutas del mismo dominio).</span>
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
-              {/* Paso 3: Modalidad de engaño + Opción "Otro" */}
+              {/* Paso 3: Modalidad del engaño (Selector desplegable compacto) */}
               <div className="space-y-2">
                 <label className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs">3</span>
-                  <span>¿Qué tipo de engaño intentaron hacerte?</span>
+                  <span>Modalidad del engaño</span>
                 </label>
 
                 <select
-                  value={isOtherScamType ? 'other' : scamTypeId || ''}
+                  id="scam-type-select"
+                  value={isOtherScamType ? 'otro' : (scamTypeId !== undefined ? String(scamTypeId) : '')}
                   onChange={(e) => {
-                    if (e.target.value === 'other') {
+                    const val = e.target.value;
+                    if (val === 'otro') {
                       setIsOtherScamType(true);
+                      setScamTypeId(undefined);
                     } else {
                       setIsOtherScamType(false);
-                      setScamTypeId(Number(e.target.value));
+                      setScamTypeId(Number(val));
                     }
                   }}
-                  className="w-full py-3 px-3.5 rounded-xl bg-slate-950 border border-white/15 text-white text-sm outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full py-3 px-3.5 rounded-xl bg-slate-950 border border-white/15 text-white text-sm outline-none focus:border-indigo-500 transition-colors cursor-pointer"
                 >
+                  <option value="" disabled>Seleccioná la modalidad del engaño...</option>
                   {scamTypes
                     .filter((st) => st.slug !== 'otro' && !st.name.toLowerCase().includes('otro'))
                     .map((st) => (
@@ -510,14 +668,12 @@ export const ReportForm: React.FC<ReportFormProps> = ({ largeText, onReportSubmi
                         {st.name}
                       </option>
                     ))}
-                  <option value="other" className="font-bold text-indigo-300">
-                    Otro tipo de engaño (describir caso específico)
-                  </option>
+                  <option value="otro">Otro tipo de engaño</option>
                 </select>
 
                 {/* Campo emergente si selecciona "Otro" */}
                 {isOtherScamType && (
-                  <div className="space-y-1.5 p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 animate-fadeIn">
+                  <div className="space-y-1.5 p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/40 animate-fadeIn mt-2">
                     <label className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
                       <HelpCircle className="w-4 h-4 text-indigo-400" />
                       <span>Especificá qué tipo de engaño fue:</span>

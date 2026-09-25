@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Shield, Search, BookOpen, AlertCircle, BarChart3, Eye, Lock } from 'lucide-react';
+import { Shield, Search, BookOpen, AlertCircle, BarChart3, Eye } from 'lucide-react';
 import Link from 'next/link';
 
 interface NavbarProps {
@@ -60,8 +60,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${isActive
-                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/35 ring-1 ring-white/20'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/35 ring-1 ring-white/20'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
                   }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
@@ -77,22 +77,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setLargeText(!largeText)}
             title="Aumentar tamaño de letra para lectura más accesible"
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${largeText
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/20'
-                : 'bg-slate-900/90 text-slate-400 border-white/10 hover:text-slate-200 hover:border-white/20'
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/20'
+              : 'bg-slate-900/90 text-slate-400 border-white/10 hover:text-slate-200 hover:border-white/20'
               }`}
           >
             <Eye className="w-4 h-4" />
-            <span>{largeText ? 'Letra Estándar' : 'Letra Grande (Adultos Mayores)'}</span>
+            <span>{largeText ? 'Letra Estándar' : 'Letra Grande'}</span>
           </button>
 
-          <Link
-            href="/admin"
-            title="Acceso restringido para moderadores"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-900/80 hover:bg-indigo-950/40 border border-white/10 hover:border-indigo-500/30 transition-all"
-          >
-            <Lock className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">/admin</span>
-          </Link>
+
         </div>
       </div>
     </header>
