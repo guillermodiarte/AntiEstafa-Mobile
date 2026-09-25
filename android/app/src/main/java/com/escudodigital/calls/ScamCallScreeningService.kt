@@ -54,7 +54,7 @@ class ScamCallScreeningService : CallScreeningService() {
                 advice = "Tené precaución con llamadas de números ocultados. No brindes datos personales."
             )
             respondToCall(callDetails, shouldBlock = false) // Nunca bloquear en modo equilibrado
-            AlertManager.sendAlert(applicationContext, result, 3000)
+            AlertManager.sendAlert(applicationContext, result, 3000, threatType = com.escudodigital.ui.ThreatInterceptActivity.TYPE_CALL)
             return
         }
 
@@ -80,7 +80,7 @@ class ScamCallScreeningService : CallScreeningService() {
                     signals = listOf("El número no está en tu agenda ni en la base de contactos de confianza"),
                     advice = "Tené cuidado. Si solicitan dinero, códigos o datos bancarios, cortá la llamada."
                 )
-            AlertManager.sendAlert(applicationContext, alertResult, 3001)
+            AlertManager.sendAlert(applicationContext, alertResult, 3001, threatType = com.escudodigital.ui.ThreatInterceptActivity.TYPE_CALL)
         }
     }
 

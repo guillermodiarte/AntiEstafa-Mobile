@@ -106,28 +106,37 @@ class ScamNotificationListener : NotificationListenerService() {
             Log.d(TAG, "Resultado teléfono: ${phoneResult.level} — ${phoneResult.signals}")
             if (phoneResult.isMediumOrHigh) {
                 Log.d(TAG, "🚨 ALERTA por número reportado: ${phoneResult.level}")
-                AlertManager.sendAlert(applicationContext, phoneResult, notifId)
+                val threatType = if (isWhatsApp) com.escudodigital.ui.ThreatInterceptActivity.TYPE_WHATSAPP else com.escudodigital.ui.ThreatInterceptActivity.TYPE_SMS
+                AlertManager.sendAlert(applicationContext, phoneResult, notifId, threatType = threatType)
                 return
             }
         }
 
-        // Analizar el contenido textual con heurísticas
-        val textResult = riskEngine.evaluateNotificationText(rawText)
-        Log.d(TAG, "Resultado texto: ${textResult.level} — ${textResult.signals}")
+        // Analizar el contenido (incluyendo URLs sospechosas y heurísticas de texto)
+        val contentResult = riskEngine.evaluateNotificationContent(rawText)
+        Log.d(TAG, "Resultado contenido: ${contentResult.level} — ${contentResult.signals}")
 
-        if (textResult.isMediumOrHigh) {
-            Log.d(TAG, "🚨 ALERTA por contenido sospechoso: ${textResult.level}")
-            AlertManager.sendAlert(applicationContext, textResult, notifId)
+        if (contentResult.isMediumOrHigh) {
+            Log.d(TAG, "🚨 ALERTA por contenido sospechoso o URL peligrosa: ${contentResult.level}")
+            val threatType = when {
+                contentResult.signals.any { it.contains("Dominio", ignoreCase = true) } ||
+                contentResult.detectedValue.startsWith("http://") ||
+                contentResult.detectedValue.startsWith("https://") -> com.escudodigital.ui.ThreatInterceptActivity.TYPE_URL
+
+                isWhatsApp -> com.escudodigital.ui.ThreatInterceptActivity.TYPE_WHATSAPP
+                else -> com.escudodigital.ui.ThreatInterceptActivity.TYPE_SMS
+            }
+            AlertManager.sendAlert(applicationContext, contentResult, notifId, threatType = threatType)
         }
 
         // Detectar llamada de WhatsApp (Sección 13 de AGENTS.md)
         if (isWhatsApp && rawText.contains("llamada", ignoreCase = true) && phoneMatch == null) {
-            val callResult = textResult.copy(
+            val callResult = contentResult.copy(
                 level = RiskLevel.MEDIUM,
                 signals = listOf("Llamada entrante de WhatsApp de contacto no identificado"),
                 advice = "Tené cuidado si solicita dinero, códigos o información personal."
             )
-            AlertManager.sendAlert(applicationContext, callResult, notifId + 1)
+            AlertManager.sendAlert(applicationContext, callResult, notifId + 1, threatType = com.escudodigital.ui.ThreatInterceptActivity.TYPE_CALL)
         }
     }
 

@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Modal de intercepción de amenaza.
+    Aparece sobre cualquier app cuando Escudo Digital detecta riesgo medio o alto.
+    Diseño: alto contraste, letra grande, lenguaje cotidiano (AGENTS.md §3).
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <!-- Barra superior con ícono de escudo y "ESCUDO DIGITAL" -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="24dp">
+
+            <ImageView
+                android:id="@+id/ivShieldIcon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_shield"
+                android:contentDescription="Escudo Digital" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="ESCUDO DIGITAL"
+                android:textColor="#AAAAAA"
+                android:textSize="13sp"
+                android:letterSpacing="0.1"
+                android:fontFamily="sans-serif-medium" />
+
+        </LinearLayout>
+
+        <!-- Badge de nivel de riesgo -->
+        <TextView
+            android:id="@+id/tvRiskBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="10dp"
+            android:background="@drawable/badge_background"
+            android:text="🔴 RIESGO ALTO DETECTADO"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Ícono grande del tipo de amenaza -->
+        <TextView
+            android:id="@+id/tvThreatTypeEmoji"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚠️"
+            android:textSize="64sp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Título principal -->
+        <TextView
+            android:id="@+id/tvThreatTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Detectamos una señal de alerta"
+            android:textColor="#FFFFFF"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Valor detectado (número / dominio) -->
+        <TextView
+            android:id="@+id/tvThreatValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="+54 9 11 3890-1234"
+            android:textColor="#AAAAAA"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Card: ¿Qué detectamos? -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_dark"
+            android:padding="16dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="¿Qué detectamos?"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Suplantación Bancaria"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:id="@+id/tvSignals"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="• Número registrado en la base de seguridad"
+                android:textColor="#CCCCCC"
+                android:textSize="14sp"
+                android:lineSpacingExtra="4dp" />
+
+        </LinearLayout>
+
+        <!-- Card: ¿Qué te recomendamos? -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_warning"
+            android:padding="16dp"
+            android:layout_marginBottom="28dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nuestra recomendación"
+                android:textColor="#FFC107"
+                android:textSize="12sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvAdvice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No realices ninguna transferencia. Llamá directamente a tu banco."
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:lineSpacingExtra="4dp" />
+
+        </LinearLayout>
+
+        <!-- ─── BOTÓN PRINCIPAL: Acción de protección (recomendado) ─── -->
+        <Button
+            android:id="@+id/btnSafeAction"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Cortar llamada (recomendado)"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:backgroundTint="@color/shield_active"
+            android:layout_marginBottom="12dp" />
+
+        <!-- ─── BOTÓN SECUNDARIO: Continuar de todas formas (peligroso) ─── -->
+        <Button
+            android:id="@+id/btnRiskyAction"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Continuar de todas formas (no recomendado)"
+            android:textSize="14sp"
+            android:textColor="#AAAAAA"
+            android:backgroundTint="@color/card_surface"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Nota legal de incertidumbre (AGENTS.md §43) -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Escudo Digital evalúa señales de riesgo. La decisión final es tuya."
+            android:textColor="#666666"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+    </LinearLayout>
+</ScrollView>

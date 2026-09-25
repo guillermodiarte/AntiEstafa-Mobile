@@ -178,6 +178,26 @@ class LocalRiskEngine(
         )
     }
 
+    /**
+     * Evalúa tanto URLs y dominios presentes en el texto como heurísticas del contenido.
+     * Si contiene una URL reportada en la base comunitaria, la marca como prioridad alta.
+     */
+    suspend fun evaluateNotificationContent(text: String): RiskResult {
+        val urlRegex = Regex("""(https?://[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|site|net|org|ar|gob\.ar|com\.ar|xyz|info)[^\s]*)""", RegexOption.IGNORE_CASE)
+        val matches = urlRegex.findAll(text)
+
+        for (match in matches) {
+            val rawUrl = match.value.trimEnd('.', ',', ';', '!', '?')
+            val domainResult = evaluateDomain(rawUrl)
+            if (domainResult.isMediumOrHigh) {
+                return domainResult.copy(detectedValue = rawUrl)
+            }
+        }
+
+        // Si no hay dominios reportados en la base, analizar con heurística de texto
+        return evaluateNotificationText(text)
+    }
+
     // --- Gestión de Lista de Confianza ---
 
     suspend fun addToTrustedList(number: String) {

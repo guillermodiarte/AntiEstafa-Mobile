@@ -36,13 +36,21 @@ setup_permissions() {
     # CALL_SCREENING: necesario para interceptar llamadas
     $ADB -s $EMULATOR_SERIAL shell cmd role add-role-holder android.app.role.CALL_SCREENING com.escudodigital
     echo "   ✅ Rol CALL_SCREENING asignado"
+
+    # SYSTEM_ALERT_WINDOW: para desplegar ventana modal sobre otras apps
+    $ADB -s $EMULATOR_SERIAL shell appops set com.escudodigital SYSTEM_ALERT_WINDOW allow
+    echo "   ✅ Ventana flotante (SYSTEM_ALERT_WINDOW) permitida"
+
+    # ANSWER_PHONE_CALLS: para colgar llamadas sospechosas desde el modal
+    $ADB -s $EMULATOR_SERIAL shell pm grant com.escudodigital android.permission.ANSWER_PHONE_CALLS 2>/dev/null || true
+    echo "   ✅ Permiso de gestión de llamadas concedido"
     
     echo ""
     echo "=== Verificación ==="
     $ADB -s $EMULATOR_SERIAL shell dumpsys package com.escudodigital | grep "POST_NOTIFICATIONS.*granted"
     $ADB -s $EMULATOR_SERIAL shell cmd role get-role-holders android.app.role.CALL_SCREENING
     echo ""
-    echo "   Listo. Ahora las alertas y el filtrado de llamadas funcionarán."
+    echo "   Listo. Ahora las alertas y el modal de intercepción funcionarán."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,9 +110,9 @@ simulate_missed_call() {
 open_scam_url() {
     local URL="${1:-http://anses-beneficios-gob-ar.site}"
     echo ""
-    echo "🌐 Abriendo URL sospechosa en el emulador: $URL"
-    $ADB -s $EMULATOR_SERIAL shell am start -a android.intent.action.VIEW -d "$URL" com.android.chrome
-    echo "   Se abrió Chrome con el dominio reportado."
+    echo "🌐 Probando intercepción de URL sospechosa: $URL"
+    $ADB -s $EMULATOR_SERIAL shell am start -a android.intent.action.VIEW -d "$URL" com.escudodigital
+    echo "   Se evaluó la URL en la base local de Escudo Digital y se lanzó el modal de advertencia."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
