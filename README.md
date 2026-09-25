@@ -2,7 +2,15 @@
 
 **FormosaHack 2026** — Solución integral e innovadora a la problemática de Seguridad y Ciberdelito orientada prioritariamente a adultos mayores y a la comunidad.
 
-Desarrollado para el **Hackathon Formosa 2025** por **DuoPrograming** (*Guillermo A. Diarte & Leticia Uliambre*).
+Desarrollado para el **Hackathon Formosa 2026** por **DuoPrograming** (*Guillermo A. Diarte & Leticia Uliambre*).
+
+---
+
+## 🎯 El Desafío — Problemática del Hackathon
+
+![Problemática del Hackathon Formosa 2026](docs/assets/Problematica.png)
+
+> 📥 **[Descargar Presentación del Proyecto (PowerPoint .ppsx)](docs/assets/PresentacionEscudoiDgital.ppsx)**
 
 ---
 
@@ -170,4 +178,4 @@ Este comando ejecuta una secuencia guiada que simula sucesivamente:
 
 * **Equipo:** DuoPrograming
 * **Integrantes:** Guillermo A. Diarte & Leticia Uliambre
-* **Evento:** Hackathon Formosa 2025 / FormosaHack 2026
+* **Evento:** Hackathon Formosa 2026 / FormosaHack 2026
