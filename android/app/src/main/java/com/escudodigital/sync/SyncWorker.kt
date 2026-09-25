@@ -33,7 +33,12 @@ class SyncWorker(
         private const val TAG = "SyncWorker"
         // URL configurable - en producción vendría de BuildConfig
         private const val BACKEND_BASE_URL = "http://10.0.2.2:8000/api/v1"
+        /** Nombre del trabajo periódico (cada 6 horas) */
         const val WORK_NAME = "escudo_digital_sync"
+        /** Nombre del trabajo único lanzado al arrancar la app */
+        const val WORK_NAME_IMMEDIATE = "escudo_digital_sync_immediate"
+        /** Tag para identificar syncs inmediatos en el WorkManager */
+        const val TAG_IMMEDIATE = "sync_immediate"
     }
 
     private val client = OkHttpClient.Builder()

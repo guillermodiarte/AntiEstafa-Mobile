@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Política de seguridad de red para Escudo Digital.
+
+    Permite HTTP cleartext ÚNICAMENTE a 10.0.2.2 (IP del host Mac desde el emulador Android).
+    En producción el backend usará HTTPS y esta regla no aplica a dominios reales.
+
+    Android 9+ (API 28+) bloquea HTTP por defecto; sin esto el SyncWorker falla con
+    "CLEARTEXT communication not permitted by network security policy".
+-->
+<network-security-config>
+    <!-- Permitir HTTP al backend local del emulador (10.0.2.2 = localhost de la Mac) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+
+    <!-- Todo el resto del tráfico sigue las reglas seguras por defecto (solo HTTPS) -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
