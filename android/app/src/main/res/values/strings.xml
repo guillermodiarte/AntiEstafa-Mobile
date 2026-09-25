@@ -24,4 +24,8 @@
     <!-- Canal de Notificaciones -->
     <string name="channel_scam_alerts_name">Alertas de Seguridad</string>
     <string name="channel_scam_alerts_desc">Avisos preventivos ante mensajes o llamadas sospechosas</string>
+
+    <!-- Protección de Navegación Web (Accesibilidad) -->
+    <string name="accessibility_service_label">Escudo Digital - Protección Web</string>
+    <string name="accessibility_service_desc">Supervisa la navegación en Chrome y otros navegadores para advertirte en tiempo real si ingresás a sitios web reportados por fraude o phishing.</string>
 </resources>

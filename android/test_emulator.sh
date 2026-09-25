@@ -50,13 +50,19 @@ setup_permissions() {
     $ADB -s $EMULATOR_SERIAL shell pm grant com.escudodigital android.permission.RECEIVE_SMS 2>/dev/null || true
     $ADB -s $EMULATOR_SERIAL shell appops set com.escudodigital WRITE_SMS allow
     echo "   ✅ Permisos de lectura y gestión de SMS concedidos"
+
+    # ACCESSIBILITY: activa el servicio de protección de navegación web en navegadores (Chrome, etc.)
+    $ADB -s $EMULATOR_SERIAL shell settings put secure enabled_accessibility_services com.escudodigital/com.escudodigital.services.ScamBrowserProtectionService
+    $ADB -s $EMULATOR_SERIAL shell settings put secure accessibility_enabled 1
+    echo "   ✅ Servicio de Accesibilidad (Protección Web en tiempo real) activado"
     
     echo ""
     echo "=== Verificación ==="
     $ADB -s $EMULATOR_SERIAL shell dumpsys package com.escudodigital | grep "POST_NOTIFICATIONS.*granted"
     $ADB -s $EMULATOR_SERIAL shell cmd role get-role-holders android.app.role.CALL_SCREENING
+    $ADB -s $EMULATOR_SERIAL shell settings get secure enabled_accessibility_services
     echo ""
-    echo "   Listo. Ahora las alertas y el modal de intercepción funcionarán."
+    echo "   Listo. Ahora las alertas, el modal y la protección web funcionarán."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,11 +120,12 @@ simulate_missed_call() {
 # 4. ABRIR URL SOSPECHOSA EN EL EMULADOR (Chrome)
 # ─────────────────────────────────────────────────────────────────────────────
 open_scam_url() {
-    local URL="${1:-http://anses-beneficios-gob-ar.site}"
+    local URL="${1:-http://infobae.com}"
     echo ""
-    echo "🌐 Probando intercepción de URL sospechosa: $URL"
-    $ADB -s $EMULATOR_SERIAL shell am start -a android.intent.action.VIEW -d "$URL" com.escudodigital
-    echo "   Se evaluó la URL en la base local de Escudo Digital y se lanzó el modal de advertencia."
+    echo "🌐 Abriendo URL sospechosa en Google Chrome: $URL"
+    $ADB -s $EMULATOR_SERIAL shell am start -n com.android.chrome/com.google.android.apps.chrome.Main -d "$URL"
+    echo "   Chrome navegando a $URL."
+    echo "   ScamBrowserProtectionService leerá la URL en la barra de direcciones y desplegará el modal interactivo."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -155,7 +162,7 @@ watch_logs() {
     echo ""
     echo "📋 Mostrando logs de Escudo Digital en tiempo real..."
     echo "   (Ctrl+C para salir)"
-    $ADB -s $EMULATOR_SERIAL logcat -s "SyncWorker:D" "ScamNotificationListener:D" "AlertManager:D" "ScamCallScreening:D"
+    $ADB -s $EMULATOR_SERIAL logcat -s "SyncWorker:D" "ScamNotificationListener:D" "AlertManager:D" "ScamCallScreening:D" "BrowserProtection:D" "ThreatIntercept:D"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

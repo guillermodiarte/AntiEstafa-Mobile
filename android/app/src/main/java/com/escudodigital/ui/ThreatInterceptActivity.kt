@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.escudodigital.R
 import com.escudodigital.data.local.EscudoDatabase
+import com.escudodigital.core.LocalRiskEngine
 import com.escudodigital.notifications.ScamNotificationListener
 import kotlinx.coroutines.launch
 
@@ -75,15 +76,16 @@ class ThreatInterceptActivity : AppCompatActivity() {
 
             lifecycleScope.launch {
                 val db = EscudoDatabase.getInstance(applicationContext)
-                val threat = db.threatDao().findDomainThreat(host)
-                if (threat != null && !threat.isDeleted) {
+                val riskEngine = LocalRiskEngine(db.threatDao(), db.trustedNumberDao())
+                val result = riskEngine.evaluateDomain(rawUrl)
+                if (result.isMediumOrHigh) {
                     setupUI(
                         threatType = TYPE_URL,
-                        riskLevel = threat.riskLevel,
+                        riskLevel = result.level.name,
                         detectedValue = rawUrl,
-                        category = threat.category ?: "Sitio Web Peligroso / Phishing",
-                        signals = "• Dominio registrado en la base de amenazas de seguridad\n• Riesgo de robo de credenciales o estafa",
-                        advice = "No ingreses tus datos personales ni claves en este sitio. Te recomendamos salir inmediatamente.",
+                        category = result.category ?: "Sitio Web Peligroso / Phishing",
+                        signals = if (result.signals.isNotEmpty()) result.signals.joinToString("\n• ", "• ") else "• Dominio registrado en la base de amenazas de seguridad\n• Riesgo de robo de credenciales o estafa",
+                        advice = result.advice ?: "No ingreses tus datos personales ni claves en este sitio. Te recomendamos salir inmediatamente.",
                         originalUrl = rawUrl,
                         notificationId = -1,
                         messageText = ""
@@ -220,6 +222,10 @@ class ThreatInterceptActivity : AppCompatActivity() {
 
                 btnRiskyAction.setOnClickListener {
                     try {
+                        com.escudodigital.services.ScamBrowserProtectionService.allowDomainTemporarily(originalUrl)
+                        val domainHost = Uri.parse(if (originalUrl.startsWith("http")) originalUrl else "http://$originalUrl").host ?: originalUrl
+                        com.escudodigital.services.ScamBrowserProtectionService.allowDomainTemporarily(domainHost)
+
                         val proceedUrl = if (originalUrl.startsWith("http://") || originalUrl.startsWith("https://")) {
                             originalUrl
                         } else {

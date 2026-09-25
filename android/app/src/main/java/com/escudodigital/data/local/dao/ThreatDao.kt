@@ -23,13 +23,19 @@ interface ThreatDao {
     suspend fun findPhoneThreat(number: String): LocalThreat?
 
     /**
-     * Búsqueda de dominio exact o como subdominio.
+     * Búsqueda de dominio exacto o como subdominio / URL.
      */
     @Query("""
         SELECT * FROM threats
         WHERE type IN ('domain', 'url')
           AND isDeleted = 0
-          AND (value = :domain OR :domain LIKE '%' || value)
+          AND (
+            value = :domain 
+            OR :domain LIKE '%' || value 
+            OR value LIKE '%' || :domain || '%'
+            OR :domain LIKE '%.' || REPLACE(REPLACE(REPLACE(value, 'https://', ''), 'http://', ''), 'www.', '')
+            OR REPLACE(REPLACE(REPLACE(value, 'https://', ''), 'http://', ''), 'www.', '') = :domain
+          )
         LIMIT 1
     """)
     suspend fun findDomainThreat(domain: String): LocalThreat?
