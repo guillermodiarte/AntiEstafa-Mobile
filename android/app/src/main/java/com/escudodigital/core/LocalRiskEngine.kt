@@ -43,7 +43,7 @@ class LocalRiskEngine(
 
     // --- Evaluación de Número Telefónico ---
 
-    suspend fun evaluatePhone(rawNumber: String): RiskResult {
+    suspend fun evaluatePhone(rawNumber: String, isCall: Boolean = true): RiskResult {
         val normalized = normalizePhone(rawNumber)
 
         // 1. Lista de confianza local del usuario (tiene prioridad máxima)
@@ -71,7 +71,7 @@ class LocalRiskEngine(
                     "Número registrado en la base de seguridad comunitaria",
                     "Modalidad: ${threat.category ?: "Fraude no clasificado"}"
                 ),
-                advice = getAdviceForCategory(threat.category)
+                advice = getAdviceForCategory(threat.category, isCall)
             )
         }
 
@@ -252,17 +252,22 @@ class LocalRiskEngine(
         }
     }
 
-    private fun getAdviceForCategory(category: String?): String {
-        return when {
-            category?.contains("Familiar", ignoreCase = true) == true ->
-                "Cortá la llamada y llamá a tu familiar a su número habitual para confirmarlo."
-            category?.contains("Banco", ignoreCase = true) == true ||
-            category?.contains("Fintech", ignoreCase = true) == true ->
-                "Los bancos nunca piden claves ni tokens por llamada o WhatsApp. No compartas nada."
-            category?.contains("ANSES", ignoreCase = true) == true ||
-            category?.contains("PAMI", ignoreCase = true) == true ->
-                "ANSES y PAMI no cobran bonos mediante cajeros ni te piden datos bancarios."
-            else -> "No respondas ni transfieras dinero. Consultá con un familiar de confianza."
+    fun getAdviceForCategory(category: String?, isCall: Boolean = true): String {
+        val cat = category?.lowercase() ?: ""
+        return if (isCall) {
+            when {
+                cat.contains("familiar") -> "Cortá la llamada y llamá a tu familiar a su número habitual para confirmarlo."
+                cat.contains("banco") || cat.contains("fintech") -> "Los bancos nunca piden claves ni tokens por llamada. Cortá la llamada."
+                cat.contains("anses") || cat.contains("pami") -> "ANSES y PAMI no cobran bonos por teléfono ni te piden claves. Cortá la llamada."
+                else -> "No brindes datos personales ni hagas transferencias. Cortá la llamada."
+            }
+        } else {
+            when {
+                cat.contains("familiar") -> "Eliminá el mensaje y no envíes dinero ni respondas. Comunicate con tu familiar llamándolo directamente al número habitual que tengas en tu agenda."
+                cat.contains("banco") || cat.contains("fintech") -> "Eliminá el mensaje de inmediato. Ningún banco te pedirá validar cuentas o enviar claves por mensaje."
+                cat.contains("anses") || cat.contains("pami") -> "Eliminá el mensaje. Ningún organismo oficial solicita datos bancarios ni claves por WhatsApp o SMS."
+                else -> "Eliminá el mensaje y no ingreses a ningún enlace. No compartas códigos ni datos personales."
+            }
         }
     }
 }

@@ -49,7 +49,8 @@ object AlertManager {
         context: Context,
         result: RiskResult,
         notificationId: Int = NOTIFICATION_ID_BASE,
-        threatType: String? = null
+        threatType: String? = null,
+        messageText: String? = null
     ) {
         if (!result.isMediumOrHigh) return
 
@@ -77,6 +78,9 @@ object AlertManager {
             putExtra(ThreatInterceptActivity.EXTRA_ADVICE, adviceText)
             putExtra(ThreatInterceptActivity.EXTRA_ORIGINAL_URL, result.detectedValue)
             putExtra(ThreatInterceptActivity.EXTRA_NOTIFICATION_ID, notificationId)
+            if (!messageText.isNullOrBlank()) {
+                putExtra(ThreatInterceptActivity.EXTRA_MESSAGE_TEXT, messageText)
+            }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or

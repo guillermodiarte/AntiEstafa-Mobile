@@ -90,7 +90,40 @@
             android:textColor="#AAAAAA"
             android:textSize="15sp"
             android:gravity="center"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="20dp" />
+
+        <!-- Card: Mensaje recibido (visible solo para SMS o WhatsApp) -->
+        <LinearLayout
+            android:id="@+id/cardMessageContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_dark"
+            android:padding="16dp"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Mensaje recibido"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textAllCaps="true"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:id="@+id/tvMessageContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Texto del mensaje"
+                android:textColor="#F1F5F9"
+                android:textSize="14sp"
+                android:lineSpacingExtra="3dp"
+                android:fontFamily="sans-serif" />
+
+        </LinearLayout>
 
         <!-- Card: ¿Qué detectamos? -->
         <LinearLayout

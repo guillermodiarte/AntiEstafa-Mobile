@@ -105,14 +105,20 @@ class ScamNotificationListener : NotificationListenerService() {
 
         if (phoneMatch != null) {
             Log.d(TAG, "Número detectado en título: '${phoneMatch.value}'")
-            val phoneResult = riskEngine.evaluatePhone(phoneMatch.value)
+            val phoneResult = riskEngine.evaluatePhone(phoneMatch.value, isCall = false)
             Log.d(TAG, "Resultado teléfono: ${phoneResult.level} — ${phoneResult.signals}")
             if (phoneResult.isMediumOrHigh) {
                 Log.d(TAG, "🚨 ALERTA por número reportado: ${phoneResult.level}")
                 // Cancelar inmediatamente la notificación sospechosa para que no quede en la barra
                 cancelScamNotification(sbnKey)
                 val threatType = if (isWhatsApp) com.escudodigital.ui.ThreatInterceptActivity.TYPE_WHATSAPP else com.escudodigital.ui.ThreatInterceptActivity.TYPE_SMS
-                AlertManager.sendAlert(applicationContext, phoneResult, notifId, threatType = threatType)
+                AlertManager.sendAlert(
+                    context = applicationContext,
+                    result = phoneResult,
+                    notificationId = notifId,
+                    threatType = threatType,
+                    messageText = rawText
+                )
                 return
             }
         }
@@ -133,7 +139,13 @@ class ScamNotificationListener : NotificationListenerService() {
                 isWhatsApp -> com.escudodigital.ui.ThreatInterceptActivity.TYPE_WHATSAPP
                 else -> com.escudodigital.ui.ThreatInterceptActivity.TYPE_SMS
             }
-            AlertManager.sendAlert(applicationContext, contentResult, notifId, threatType = threatType)
+            AlertManager.sendAlert(
+                context = applicationContext,
+                result = contentResult,
+                notificationId = notifId,
+                threatType = threatType,
+                messageText = rawText
+            )
             return
         }
 

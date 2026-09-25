@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.telecom.TelecomManager
 import android.telephony.TelephonyManager
 import android.util.Log
+import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
@@ -31,9 +32,9 @@ import kotlinx.coroutines.launch
  *
  * Muestra el tipo de alerta, señales encontradas y dos opciones claras:
  * - Acción segura y recomendada (cortar llamada, eliminar mensaje, salir a google.com).
- * - Continuar bajo su propio riesgo (siempre desaconsejado).
+ * - Continuar bajo su propio riesgo (siempre desaconsejado, redirigiendo a la app correspondiente).
  *
- * No deja notificaciones residuales en la bandeja de estado.
+ * Muestra el contenido del mensaje recibido y adapta las recomendaciones según el canal.
  */
 class ThreatInterceptActivity : AppCompatActivity() {
 
@@ -48,6 +49,7 @@ class ThreatInterceptActivity : AppCompatActivity() {
         const val EXTRA_ADVICE = "extra_advice"
         const val EXTRA_ORIGINAL_URL = "extra_original_url"
         const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
+        const val EXTRA_MESSAGE_TEXT = "extra_message_text"
 
         const val TYPE_CALL = "CALL"
         const val TYPE_SMS = "SMS"
@@ -83,7 +85,8 @@ class ThreatInterceptActivity : AppCompatActivity() {
                         signals = "• Dominio registrado en la base de amenazas de seguridad\n• Riesgo de robo de credenciales o estafa",
                         advice = "No ingreses tus datos personales ni claves en este sitio. Te recomendamos salir inmediatamente.",
                         originalUrl = rawUrl,
-                        notificationId = -1
+                        notificationId = -1,
+                        messageText = ""
                     )
                 } else {
                     // Si no es amenaza conocida, abrir con Chrome u otro navegador
@@ -107,11 +110,12 @@ class ThreatInterceptActivity : AppCompatActivity() {
         val detectedValue = intent.getStringExtra(EXTRA_DETECTED_VALUE) ?: ""
         val category = intent.getStringExtra(EXTRA_CATEGORY) ?: "Amenaza detectada"
         val signals = intent.getStringExtra(EXTRA_SIGNALS) ?: "• Señal de riesgo detectada por el motor de seguridad"
-        val advice = intent.getStringExtra(EXTRA_ADVICE) ?: "No brindes datos personales ni claves bancarias."
+        val rawAdvice = intent.getStringExtra(EXTRA_ADVICE) ?: "No brindes datos personales ni claves bancarias."
         val originalUrl = intent.getStringExtra(EXTRA_ORIGINAL_URL) ?: detectedValue
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
+        val messageText = intent.getStringExtra(EXTRA_MESSAGE_TEXT) ?: ""
 
-        setupUI(threatType, riskLevel, detectedValue, category, signals, advice, originalUrl, notificationId)
+        setupUI(threatType, riskLevel, detectedValue, category, signals, rawAdvice, originalUrl, notificationId, messageText)
     }
 
     private fun setupUI(
@@ -120,14 +124,17 @@ class ThreatInterceptActivity : AppCompatActivity() {
         detectedValue: String,
         category: String,
         signals: String,
-        advice: String,
+        rawAdvice: String,
         originalUrl: String,
-        notificationId: Int
+        notificationId: Int,
+        messageText: String
     ) {
         val tvRiskBadge = findViewById<TextView>(R.id.tvRiskBadge)
         val tvThreatTypeEmoji = findViewById<TextView>(R.id.tvThreatTypeEmoji)
         val tvThreatTitle = findViewById<TextView>(R.id.tvThreatTitle)
         val tvThreatValue = findViewById<TextView>(R.id.tvThreatValue)
+        val cardMessageContent = findViewById<View>(R.id.cardMessageContent)
+        val tvMessageContent = findViewById<TextView>(R.id.tvMessageContent)
         val tvCategory = findViewById<TextView>(R.id.tvCategory)
         val tvSignals = findViewById<TextView>(R.id.tvSignals)
         val tvAdvice = findViewById<TextView>(R.id.tvAdvice)
@@ -146,7 +153,33 @@ class ThreatInterceptActivity : AppCompatActivity() {
         tvThreatValue.text = detectedValue
         tvCategory.text = category
         tvSignals.text = signals
-        tvAdvice.text = advice
+
+        // Mostrar el contenido del mensaje recibido si aplica
+        if ((threatType == TYPE_SMS || threatType == TYPE_WHATSAPP) && messageText.isNotBlank()) {
+            cardMessageContent.visibility = View.VISIBLE
+            tvMessageContent.text = "\"$messageText\""
+        } else {
+            cardMessageContent.visibility = View.GONE
+        }
+
+        // Adaptar la recomendación según sea mensaje vs llamada
+        val resolvedAdvice = when {
+            (threatType == TYPE_SMS || threatType == TYPE_WHATSAPP) &&
+            (category.contains("Familiar", ignoreCase = true) || rawAdvice.contains("llamada", ignoreCase = true)) -> {
+                "Eliminá el mensaje y no envíes dinero ni respondas. Comunicate con tu familiar llamándolo directamente al número habitual que tengas agendado en tus contactos."
+            }
+            (threatType == TYPE_SMS || threatType == TYPE_WHATSAPP) &&
+            (category.contains("Banco", ignoreCase = true) || category.contains("Fintech", ignoreCase = true)) -> {
+                "Eliminá el mensaje de inmediato. Ningún banco te pedirá validar cuentas o enviar claves por mensaje."
+            }
+            threatType == TYPE_SMS || threatType == TYPE_WHATSAPP -> {
+                if (rawAdvice.contains("llamada", ignoreCase = true)) {
+                    "Eliminá el mensaje y no ingreses a ningún enlace. No compartas códigos ni datos personales."
+                } else rawAdvice
+            }
+            else -> rawAdvice
+        }
+        tvAdvice.text = resolvedAdvice
 
         // Personalización según el tipo de amenaza (Llamada / Mensaje / URL)
         when (threatType) {
@@ -176,7 +209,6 @@ class ThreatInterceptActivity : AppCompatActivity() {
                 btnRiskyAction.text = "Continuar al sitio web (Peligroso / No recomendado)"
 
                 btnSafeAction.setOnClickListener {
-                    // Redirigir a google.com como solicita la especificación
                     val googleIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     }
@@ -212,17 +244,52 @@ class ThreatInterceptActivity : AppCompatActivity() {
                 btnSafeAction.text = "Eliminar mensaje (Recomendado)"
                 btnRiskyAction.text = "Continuar y ver mensaje (No recomendado)"
 
+                // Acción segura: Borrar mensaje y volver a inicio limpio
                 btnSafeAction.setOnClickListener {
-                    deleteSmsMessage(detectedValue)
+                    deleteSmsMessage(detectedValue, messageText)
                     clearAllNotifications()
                     Toast.makeText(this, "Mensaje descartado y alerta eliminada.", Toast.LENGTH_SHORT).show()
+                    goToHomeScreen()
                     finish()
                 }
 
+                // Acción peligrosa: Abrir la app de mensajería (SMS o WhatsApp) para ver el mensaje
                 btnRiskyAction.setOnClickListener {
-                    Toast.makeText(this, "Advertencia: Nunca compartas códigos ni transfieras dinero", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Atención: Nunca compartas códigos ni transfieras dinero", Toast.LENGTH_LONG).show()
+                    openMessagingApp(threatType, detectedValue)
                     finish()
                 }
+            }
+        }
+    }
+
+    private fun openMessagingApp(threatType: String, detectedValue: String) {
+        if (threatType == TYPE_WHATSAPP) {
+            val waIntent = packageManager.getLaunchIntentForPackage("com.whatsapp")
+            if (waIntent != null) {
+                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(waIntent)
+                return
+            }
+        }
+
+        // Para SMS: abrir la conversación del remitente o la app de mensajería
+        val cleanNumber = detectedValue.replace(Regex("[^0-9+]"), "").trim()
+        val smsIntent = Intent(Intent.ACTION_VIEW).apply {
+            data = Uri.parse(if (cleanNumber.isNotEmpty()) "sms:$cleanNumber" else "sms:")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        try {
+            startActivity(smsIntent)
+        } catch (e: Exception) {
+            val appIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_APP_MESSAGING)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            try {
+                startActivity(appIntent)
+            } catch (ex: Exception) {
+                Log.e(TAG, "No se pudo abrir la app de mensajería: ${ex.message}")
             }
         }
     }
@@ -298,7 +365,7 @@ class ThreatInterceptActivity : AppCompatActivity() {
         goToHomeScreen()
     }
 
-    private fun deleteSmsMessage(detectedValue: String) {
+    private fun deleteSmsMessage(detectedValue: String, messageText: String) {
         val cleanNumber = detectedValue.replace(Regex("[^0-9+]"), "").trim()
         val uri = Uri.parse("content://sms")
         var count = 0
@@ -307,8 +374,8 @@ class ThreatInterceptActivity : AppCompatActivity() {
             if (cleanNumber.isNotEmpty()) {
                 count += contentResolver.delete(uri, "address LIKE ?", arrayOf("%$cleanNumber%"))
             }
-            if (count == 0 && detectedValue.isNotBlank()) {
-                val snippet = detectedValue.take(30).trim()
+            if (count == 0 && messageText.isNotBlank()) {
+                val snippet = messageText.take(30).trim()
                 if (snippet.length >= 5) {
                     count += contentResolver.delete(uri, "body LIKE ?", arrayOf("%$snippet%"))
                 }
@@ -316,19 +383,6 @@ class ThreatInterceptActivity : AppCompatActivity() {
             Log.d(TAG, "SMS eliminados de content://sms: $count")
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo borrar directamente de content://sms: ${e.message}")
-        }
-
-        // Si Android no permitió borrado directo (por política de default SMS), abrir la conversación para borrarla
-        if (count == 0 && cleanNumber.isNotEmpty()) {
-            try {
-                val smsIntent = Intent(Intent.ACTION_VIEW).apply {
-                    data = Uri.parse("sms:$cleanNumber")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                startActivity(smsIntent)
-            } catch (e: Exception) {
-                // ignore
-            }
         }
 
         // Cancelar cualquier notificación activa del listener

@@ -85,7 +85,7 @@ simulate_call() {
     {
         echo "auth $(cat ~/.emulator_console_auth_token 2>/dev/null || echo '')"
         echo "gsm call $NUMBER"
-        sleep 20
+        sleep 50
         echo "gsm cancel $NUMBER"
         echo "exit"
     } | nc -w 25 localhost 5554
