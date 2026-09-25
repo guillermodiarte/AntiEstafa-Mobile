@@ -153,6 +153,31 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
+                <!-- Protección Web en Navegadores (Accesibilidad) -->
+                <LinearLayout
+                    android:id="@+id/rowBrowserProtection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="Protección Web (Chrome)"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="15sp" />
+                    <TextView
+                        android:id="@+id/tvBrowserStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Activo"
+                        android:textStyle="bold"
+                        android:textColor="@color/shield_active"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
                 <!-- Base Local Offline -->
                 <LinearLayout
                     android:layout_width="match_parent"

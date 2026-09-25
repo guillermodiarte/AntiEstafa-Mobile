@@ -225,6 +225,7 @@ class LocalRiskEngine(
             .split("/")[0]
             .split("?")[0]
             .removePrefix("www.")
+            .trimEnd('.')
     }
 
     private fun mapRiskLevel(riskStr: String): RiskLevel = when (riskStr.lowercase()) {

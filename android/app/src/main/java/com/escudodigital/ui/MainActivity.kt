@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -130,6 +131,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnCheckPermissions.setOnClickListener {
             openPermissionGuide()
         }
+        binding.rowBrowserProtection.setOnClickListener {
+            Toast.makeText(this, "Activá 'Escudo Digital' para proteger la navegación en Chrome", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
     }
 
     /**
@@ -177,11 +182,19 @@ class MainActivity : AppCompatActivity() {
                 getColor(if (listenerEnabled) R.color.shield_active else R.color.shield_warning)
             )
 
+            // Estado de Protección Web (Accesibilidad)
+            val a11yEnabled = isAccessibilityServiceEnabled()
+            binding.tvBrowserStatus.text =
+                if (a11yEnabled) "Activo" else "⚠️ Inactivo (Tocar)"
+            binding.tvBrowserStatus.setTextColor(
+                getColor(if (a11yEnabled) R.color.shield_active else R.color.shield_warning)
+            )
+
             // Estado general
-            if (listenerEnabled) {
+            if (listenerEnabled && a11yEnabled) {
                 binding.tvProtectionTitle.text = "🟢 Protección activa"
                 binding.tvProtectionDesc.text =
-                    "Escudo Digital está funcionando y cuidando tus llamadas y mensajes."
+                    "Escudo Digital está funcionando y cuidando tus llamadas, mensajes y navegación web."
             } else {
                 binding.tvProtectionTitle.text = "🟡 Configuración incompleta"
                 binding.tvProtectionDesc.text =
@@ -224,13 +237,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openPermissionGuide() {
-        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        if (!isAccessibilityServiceEnabled()) {
+            Toast.makeText(this, "Activá 'Escudo Digital' en Accesibilidad para proteger la navegación", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } else if (!isNotificationListenerEnabled()) {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        } else {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
     }
 
     private fun isNotificationListenerEnabled(): Boolean {
         val cn = "${packageName}/com.escudodigital.notifications.ScamNotificationListener"
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
         return flat?.contains(cn) == true
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val expectedService = "${packageName}/com.escudodigital.services.ScamBrowserProtectionService"
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val splitter = android.text.TextUtils.SimpleStringSplitter(':')
+        splitter.setString(enabledServices)
+        while (splitter.hasNext()) {
+            val service = splitter.next()
+            if (service.equals(expectedService, ignoreCase = true) || service.contains("ScamBrowserProtectionService", ignoreCase = true)) {
+                return true
+            }
+        }
+        return false
     }
 
     override fun onResume() {

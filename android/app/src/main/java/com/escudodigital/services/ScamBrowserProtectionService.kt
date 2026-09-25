@@ -61,7 +61,7 @@ class ScamBrowserProtectionService : AccessibilityService() {
             ?: return
 
         val domain = riskEngine.normalizeDomain(rawUrl)
-        if (domain.isBlank() || domain.length < 3 || !domain.contains(".")) return
+        if (domain.isBlank() || domain.length < 4 || !domain.contains(".") || domain.substringAfterLast(".").length < 2) return
 
         val now = System.currentTimeMillis()
         if (domain == lastCheckedDomain && (now - lastCheckTimestamp) < 4000L) {
