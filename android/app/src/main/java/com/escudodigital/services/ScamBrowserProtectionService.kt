@@ -48,18 +48,35 @@ class ScamBrowserProtectionService : AccessibilityService() {
         riskEngine = LocalRiskEngine(db.threatDao(), db.trustedNumberDao())
     }
 
+    data class BrowserUrlInfo(
+        val url: String,
+        val isFocused: Boolean
+    )
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
 
-        // Solo procesar cambios de ventana o contenido en navegadores
+        // 1. Ignorar tecleo directo o autocompletado mientras el usuario escribe en el campo de texto
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            return
+        }
+
+        // 2. Solo procesar cambios de ventana o contenido en navegadores
         val packageName = event.packageName?.toString() ?: return
         if (!isBrowserPackage(packageName)) return
 
         val rootNode = rootInActiveWindow ?: event.source ?: return
-        val rawUrl = findUrlInBrowser(rootNode, packageName)
+        val urlInfo = findUrlInBrowser(rootNode, packageName)
             ?: (if (rootInActiveWindow != null) event.source?.let { findUrlInBrowser(it, packageName) } else null)
             ?: return
 
+        // 3. Si la barra de direcciones está enfocada (el usuario está tipeando o hay sugerencias en pantalla),
+        // NO bloquear. Solo interceptar cuando se presione Enter / inicie la navegación (la barra pierde el foco).
+        if (urlInfo.isFocused) {
+            return
+        }
+
+        val rawUrl = urlInfo.url
         val domain = riskEngine.normalizeDomain(rawUrl)
         if (domain.isBlank() || domain.length < 4 || !domain.contains(".") || domain.substringAfterLast(".").length < 2) return
 
@@ -113,7 +130,7 @@ class ScamBrowserProtectionService : AccessibilityService() {
      * Busca el texto de la barra de direcciones según los IDs de vista de Chrome y navegadores habituales,
      * o busca un nodo de entrada de URL en la jerarquía.
      */
-    private fun findUrlInBrowser(rootNode: AccessibilityNodeInfo, packageName: String): String? {
+    private fun findUrlInBrowser(rootNode: AccessibilityNodeInfo, packageName: String): BrowserUrlInfo? {
         val browserUrlIds = listOf(
             "$packageName:id/url_bar",
             "com.android.chrome:id/url_bar",
@@ -132,7 +149,7 @@ class ScamBrowserProtectionService : AccessibilityService() {
                 for (node in nodes) {
                     val text = node.text?.toString() ?: node.contentDescription?.toString()
                     if (!text.isNullOrBlank() && (text.contains(".") || text.startsWith("http"))) {
-                        return text
+                        return BrowserUrlInfo(url = text, isFocused = node.isFocused)
                     }
                 }
             } catch (e: Exception) {
@@ -144,7 +161,7 @@ class ScamBrowserProtectionService : AccessibilityService() {
         return searchUrlRecursive(rootNode, depth = 0)
     }
 
-    private fun searchUrlRecursive(node: AccessibilityNodeInfo?, depth: Int): String? {
+    private fun searchUrlRecursive(node: AccessibilityNodeInfo?, depth: Int): BrowserUrlInfo? {
         if (node == null || depth > 8) return null
 
         val isInput = node.isEditable || node.className?.contains("EditText", ignoreCase = true) == true
@@ -152,7 +169,7 @@ class ScamBrowserProtectionService : AccessibilityService() {
             val text = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
             if (text.isNotBlank() && (text.startsWith("http://") || text.startsWith("https://") ||
                         (text.contains(".") && !text.contains(" ") && text.length > 3))) {
-                return text
+                return BrowserUrlInfo(url = text, isFocused = node.isFocused)
             }
         }
 
