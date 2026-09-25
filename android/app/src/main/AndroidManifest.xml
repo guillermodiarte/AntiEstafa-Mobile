@@ -14,6 +14,10 @@
     
     <!-- Permiso para cortar llamadas sospechosas desde el modal de advertencia -->
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    
+    <!-- Permisos para leer y procesar SMS fraudulentos -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <application
         android:name=".EscudoApp"

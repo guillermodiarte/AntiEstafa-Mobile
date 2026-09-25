@@ -2,22 +2,20 @@ package com.escudodigital.core
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.escudodigital.R
 import com.escudodigital.ui.ThreatInterceptActivity
 
 /**
  * Gestiona la emisión de alertas preventivas al usuario.
- * Sección 6 de AGENTS.md: Flujo principal de alerta simple.
- * Sección 25 de AGENTS.md: Niveles de riesgo y qué mostrar.
  *
- * Emite una notificación de alta prioridad y ejecuta una ventana modal (ThreatInterceptActivity)
- * que se muestra sobre cualquier aplicación con acciones contextuales de protección.
+ * Modo sin notificaciones molestas:
+ * No deja notificaciones persistentes en la barra de estado.
+ * Despliega inmediatamente la ventana modal ThreatInterceptActivity sobre la pantalla
+ * con opciones contextuales claras para protegerse (cortar llamada, eliminar mensaje, salir de la URL).
  */
 object AlertManager {
 
@@ -44,8 +42,8 @@ object AlertManager {
     }
 
     /**
-     * Emite una notificación de alerta preventiva y abre la ventana modal de intercepción.
-     * Muestra las opciones contextuales para cortar llamada, eliminar mensaje o salir de la URL hacia google.com.
+     * Lanza la ventana modal de intercepción directamente sobre la pantalla actual.
+     * Cancela cualquier notificación residual para no saturar la bandeja del usuario.
      */
     fun sendAlert(
         context: Context,
@@ -53,21 +51,23 @@ object AlertManager {
         notificationId: Int = NOTIFICATION_ID_BASE,
         threatType: String? = null
     ) {
-        // No enviar alerta si el riesgo es bajo o la fuente es la lista de confianza
         if (!result.isMediumOrHigh) return
 
         val resolvedType = threatType ?: resolveThreatType(result)
-
-        val title = when (result.level) {
-            RiskLevel.HIGH -> "🚨 ALERTA: Amenaza detectada"
-            RiskLevel.MEDIUM -> "⚠️ Advertencia de seguridad"
-            else -> return
-        }
-
         val signalsFormatted = result.signals.joinToString("\n• ", "• ")
         val adviceText = result.advice ?: "Tené precaución. No compartas claves ni realices transferencias."
 
-        // Intent para abrir la ventana modal interactiva
+        // Limpiar cualquier notificación activa previa para no dejar basura en la barra de estado
+        try {
+            val notificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(notificationId)
+            notificationManager.cancelAll()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error limpiando notificaciones previas: ${e.message}")
+        }
+
+        // Intent para abrir inmediatamente la ventana modal interactiva
         val modalIntent = Intent(context, ThreatInterceptActivity::class.java).apply {
             putExtra(ThreatInterceptActivity.EXTRA_THREAT_TYPE, resolvedType)
             putExtra(ThreatInterceptActivity.EXTRA_RISK_LEVEL, result.level.name)
@@ -77,49 +77,17 @@ object AlertManager {
             putExtra(ThreatInterceptActivity.EXTRA_ADVICE, adviceText)
             putExtra(ThreatInterceptActivity.EXTRA_ORIGINAL_URL, result.detectedValue)
             putExtra(ThreatInterceptActivity.EXTRA_NOTIFICATION_ID, notificationId)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
         }
 
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            notificationId,
-            modalIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            context,
-            notificationId + 20000,
-            modalIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val summaryText = result.signals.firstOrNull() ?: "Tocá para revisar la amenaza y tomar una acción segura."
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_shield)
-            .setContentTitle(title)
-            .setContentText(summaryText)
-            .setStyle(NotificationCompat.BigTextStyle()
-                .bigText("$summaryText\nRecomendación: $adviceText")
-                .setSummaryText("Escudo Digital"))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .build()
-
-        val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(notificationId, notification)
-
-        // Lanzar inmediatamente la ventana modal sobre la pantalla actual
         try {
             context.startActivity(modalIntent)
-            Log.d(TAG, "Ventana modal ThreatInterceptActivity desplegada con éxito")
+            Log.d(TAG, "Modal interactivo desplegado con éxito (sin notificación en bandeja)")
         } catch (e: Exception) {
-            Log.w(TAG, "No se pudo iniciar ThreatInterceptActivity directamente: ${e.message}")
+            Log.e(TAG, "No se pudo iniciar ThreatInterceptActivity: ${e.message}")
         }
     }
 

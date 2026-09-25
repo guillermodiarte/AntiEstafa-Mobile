@@ -44,6 +44,12 @@ setup_permissions() {
     # ANSWER_PHONE_CALLS: para colgar llamadas sospechosas desde el modal
     $ADB -s $EMULATOR_SERIAL shell pm grant com.escudodigital android.permission.ANSWER_PHONE_CALLS 2>/dev/null || true
     echo "   ✅ Permiso de gestión de llamadas concedido"
+
+    # SMS: permisos para leer y borrar SMS fraudulentos
+    $ADB -s $EMULATOR_SERIAL shell pm grant com.escudodigital android.permission.READ_SMS 2>/dev/null || true
+    $ADB -s $EMULATOR_SERIAL shell pm grant com.escudodigital android.permission.RECEIVE_SMS 2>/dev/null || true
+    $ADB -s $EMULATOR_SERIAL shell appops set com.escudodigital WRITE_SMS allow
+    echo "   ✅ Permisos de lectura y gestión de SMS concedidos"
     
     echo ""
     echo "=== Verificación ==="
@@ -79,10 +85,10 @@ simulate_call() {
     {
         echo "auth $(cat ~/.emulator_console_auth_token 2>/dev/null || echo '')"
         echo "gsm call $NUMBER"
-        sleep 5
+        sleep 20
         echo "gsm cancel $NUMBER"
         echo "exit"
-    } | nc -w 10 localhost 5554
+    } | nc -w 25 localhost 5554
     echo "   Llamada simulada desde número sospechoso: $NUMBER"
     echo "   Este número está en la base de Escudo Digital (Suplantación Bancaria)"
 }

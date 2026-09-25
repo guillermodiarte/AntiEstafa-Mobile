@@ -59,6 +59,13 @@ class MainActivity : AppCompatActivity() {
         refreshStatus()
     }
 
+    // Launcher para permisos adicionales (cortar llamadas, leer/eliminar SMS fraudulentos)
+    private val extraPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        refreshStatus()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -76,9 +83,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Pide los dos permisos críticos sin los que la protección no funciona:
-     *  1. POST_NOTIFICATIONS → para mostrar alertas visibles
+     * Pide los permisos críticos para proteger llamadas y mensajes:
+     *  1. POST_NOTIFICATIONS (Android 13+)
      *  2. ROLE_CALL_SCREENING → para interceptar llamadas entrantes
+     *  3. ANSWER_PHONE_CALLS → para cortar llamadas sospechosas desde el modal
+     *  4. READ_SMS / RECEIVE_SMS → para analizar y eliminar mensajes fraudulentos
      */
     private fun requestCriticalPermissions() {
         // 1. POST_NOTIFICATIONS (requerido en Android 13 / API 33+)
@@ -96,6 +105,21 @@ class MainActivity : AppCompatActivity() {
                 val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
                 callScreeningRoleLauncher.launch(intent)
             }
+        }
+
+        // 3. Permisos para colgar llamadas y procesar SMS
+        val neededPermissions = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.ANSWER_PHONE_CALLS)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.READ_SMS)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
+            neededPermissions.add(Manifest.permission.RECEIVE_SMS)
+        }
+        if (neededPermissions.isNotEmpty()) {
+            extraPermissionsLauncher.launch(neededPermissions.toTypedArray())
         }
     }
 

@@ -1,21 +1,27 @@
 package com.escudodigital.ui
 
+import android.Manifest
 import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
+import android.util.Log
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.escudodigital.R
 import com.escudodigital.data.local.EscudoDatabase
+import com.escudodigital.notifications.ScamNotificationListener
 import kotlinx.coroutines.launch
 
 /**
@@ -26,10 +32,14 @@ import kotlinx.coroutines.launch
  * Muestra el tipo de alerta, señales encontradas y dos opciones claras:
  * - Acción segura y recomendada (cortar llamada, eliminar mensaje, salir a google.com).
  * - Continuar bajo su propio riesgo (siempre desaconsejado).
+ *
+ * No deja notificaciones residuales en la bandeja de estado.
  */
 class ThreatInterceptActivity : AppCompatActivity() {
 
     companion object {
+        private const val TAG = "ThreatIntercept"
+
         const val EXTRA_THREAT_TYPE = "extra_threat_type" // CALL, SMS, WHATSAPP, URL
         const val EXTRA_RISK_LEVEL = "extra_risk_level"
         const val EXTRA_DETECTED_VALUE = "extra_detected_value"
@@ -50,6 +60,9 @@ class ThreatInterceptActivity : AppCompatActivity() {
 
         // Configuración para mostrar la ventana sobre la pantalla de bloqueo y encender pantalla
         setupWindowFlags()
+
+        // Limpiar cualquier notificación activa para no molestar al usuario
+        clearAllNotifications()
 
         setContentView(R.layout.activity_threat_intercept)
 
@@ -88,7 +101,7 @@ class ThreatInterceptActivity : AppCompatActivity() {
             return
         }
 
-        // Caso 2: Se abrió desde AlertManager o notificación con extras
+        // Caso 2: Se abrió desde AlertManager o intento con extras
         val threatType = determineThreatType()
         val riskLevel = intent.getStringExtra(EXTRA_RISK_LEVEL) ?: "HIGH"
         val detectedValue = intent.getStringExtra(EXTRA_DETECTED_VALUE) ?: ""
@@ -145,9 +158,8 @@ class ThreatInterceptActivity : AppCompatActivity() {
 
                 btnSafeAction.setOnClickListener {
                     endCurrentCall()
-                    dismissNotification(notificationId)
+                    clearAllNotifications()
                     Toast.makeText(this, "Llamada finalizada por seguridad", Toast.LENGTH_SHORT).show()
-                    goToHomeScreen()
                     finish()
                 }
 
@@ -169,7 +181,7 @@ class ThreatInterceptActivity : AppCompatActivity() {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     }
                     startActivity(googleIntent)
-                    dismissNotification(notificationId)
+                    clearAllNotifications()
                     Toast.makeText(this, "Redirigido a un sitio seguro (Google)", Toast.LENGTH_SHORT).show()
                     finish()
                 }
@@ -201,22 +213,9 @@ class ThreatInterceptActivity : AppCompatActivity() {
                 btnRiskyAction.text = "Continuar y ver mensaje (No recomendado)"
 
                 btnSafeAction.setOnClickListener {
-                    dismissNotification(notificationId)
-                    // Abrir la app de mensajería para que el usuario pueda borrarlo
-                    val messagingIntent = Intent(Intent.ACTION_MAIN).apply {
-                        addCategory(Intent.CATEGORY_APP_MESSAGING)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    try {
-                        startActivity(messagingIntent)
-                    } catch (e: Exception) {
-                        val smsIntent = Intent(Intent.ACTION_VIEW).apply {
-                            data = Uri.parse("sms:")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }
-                        startActivity(smsIntent)
-                    }
-                    Toast.makeText(this, "Notificación descartada. Elimina el mensaje por seguridad.", Toast.LENGTH_LONG).show()
+                    deleteSmsMessage(detectedValue)
+                    clearAllNotifications()
+                    Toast.makeText(this, "Mensaje descartado y alerta eliminada.", Toast.LENGTH_SHORT).show()
                     finish()
                 }
 
@@ -263,13 +262,80 @@ class ThreatInterceptActivity : AppCompatActivity() {
     }
 
     private fun endCurrentCall() {
+        var ended = false
+
+        // 1. TelecomManager.endCall() (Android 9+ / API 28+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
             try {
-                telecomManager?.endCall()
-            } catch (e: SecurityException) {
-                // Requiere permiso ANSWER_PHONE_CALLS
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED) {
+                    ended = telecomManager?.endCall() ?: false
+                    Log.d(TAG, "TelecomManager.endCall() ejecutado con resultado: $ended")
+                } else {
+                    Log.w(TAG, "No se cuenta con permiso ANSWER_PHONE_CALLS")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error invocando telecomManager.endCall(): ${e.message}")
             }
+        }
+
+        // 2. TelephonyManager reflection fallback
+        if (!ended) {
+            try {
+                val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+                val method = tm?.javaClass?.getDeclaredMethod("getITelephony")
+                method?.isAccessible = true
+                val telephony = method?.invoke(tm)
+                val endCallMethod = telephony?.javaClass?.getDeclaredMethod("endCall")
+                endCallMethod?.invoke(telephony)
+                Log.d(TAG, "Llamada finalizada mediante Telephony reflection fallback")
+            } catch (e: Exception) {
+                Log.w(TAG, "Fallback Telephony reflection no disponible: ${e.message}")
+            }
+        }
+
+        // 3. Regresar inmediatamente a la pantalla de inicio para despejar la pantalla
+        goToHomeScreen()
+    }
+
+    private fun deleteSmsMessage(detectedValue: String) {
+        val cleanNumber = detectedValue.replace(Regex("[^0-9+]"), "").trim()
+        val uri = Uri.parse("content://sms")
+        var count = 0
+
+        try {
+            if (cleanNumber.isNotEmpty()) {
+                count += contentResolver.delete(uri, "address LIKE ?", arrayOf("%$cleanNumber%"))
+            }
+            if (count == 0 && detectedValue.isNotBlank()) {
+                val snippet = detectedValue.take(30).trim()
+                if (snippet.length >= 5) {
+                    count += contentResolver.delete(uri, "body LIKE ?", arrayOf("%$snippet%"))
+                }
+            }
+            Log.d(TAG, "SMS eliminados de content://sms: $count")
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo borrar directamente de content://sms: ${e.message}")
+        }
+
+        // Si Android no permitió borrado directo (por política de default SMS), abrir la conversación para borrarla
+        if (count == 0 && cleanNumber.isNotEmpty()) {
+            try {
+                val smsIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = Uri.parse("sms:$cleanNumber")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(smsIntent)
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
+        // Cancelar cualquier notificación activa del listener
+        try {
+            ScamNotificationListener.instance?.cancelAllNotifications()
+        } catch (e: Exception) {
+            // ignore
         }
     }
 
@@ -281,10 +347,12 @@ class ThreatInterceptActivity : AppCompatActivity() {
         startActivity(homeIntent)
     }
 
-    private fun dismissNotification(notificationId: Int) {
-        if (notificationId != -1) {
+    private fun clearAllNotifications() {
+        try {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            notificationManager?.cancel(notificationId)
+            notificationManager?.cancelAll()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cancelando notificaciones: ${e.message}")
         }
     }
 }

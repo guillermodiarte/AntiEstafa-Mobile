@@ -18,12 +18,10 @@ import kotlinx.coroutines.launch
  * Escucha notificaciones de WhatsApp y SMS de forma no invasiva.
  * Secciones 7, 8 y 9 de AGENTS.md: límites, reglas y prioridades.
  *
- * Solo procesa:
- * - WhatsApp (com.whatsapp)
- * - SMS del dispositivo (Google Messages, Samsung Messages, etc.)
- *
- * NO accede al chat completo. Solo analiza el snippet visible en la notificación.
- * El contenido temporal es descartado inmediatamente tras el análisis.
+ * Al detectar una amenaza:
+ * 1. Cancela y remueve inmediatamente la notificación fraudulenta de la barra de estado
+ *    para no molestar al usuario con alertas acumuladas.
+ * 2. Lanza de forma directa la ventana modal ThreatInterceptActivity.
  */
 class ScamNotificationListener : NotificationListenerService() {
 
@@ -33,6 +31,7 @@ class ScamNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "ScamNotifListener"
+        var instance: ScamNotificationListener? = null
     }
 
     // Paquetes monitoreados. Solo los necesarios (Sección 9 de AGENTS.md).
@@ -46,6 +45,7 @@ class ScamNotificationListener : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Log.d(TAG, "ScamNotificationListener iniciado")
         val db = EscudoDatabase.getInstance(applicationContext)
         riskEngine = LocalRiskEngine(db.threatDao(), db.trustedNumberDao())
@@ -79,13 +79,15 @@ class ScamNotificationListener : NotificationListenerService() {
 
         val isWhatsApp = sbn.packageName.startsWith("com.whatsapp")
         val notifId = notificationCounter++
+        val sbnKey = sbn.key
 
         scope.launch {
             analyzeAndAlert(
                 rawText = contentToAnalyze,
                 senderHint = title,
                 isWhatsApp = isWhatsApp,
-                notifId = notifId
+                notifId = notifId,
+                sbnKey = sbnKey
             )
         }
     }
@@ -94,7 +96,8 @@ class ScamNotificationListener : NotificationListenerService() {
         rawText: String,
         senderHint: String,
         isWhatsApp: Boolean,
-        notifId: Int
+        notifId: Int,
+        sbnKey: String
     ) {
         // Detectar si el título contiene un número de teléfono
         val phoneRegex = Regex("""[\+]?[\d\s\-(). ]{7,20}""")
@@ -106,6 +109,8 @@ class ScamNotificationListener : NotificationListenerService() {
             Log.d(TAG, "Resultado teléfono: ${phoneResult.level} — ${phoneResult.signals}")
             if (phoneResult.isMediumOrHigh) {
                 Log.d(TAG, "🚨 ALERTA por número reportado: ${phoneResult.level}")
+                // Cancelar inmediatamente la notificación sospechosa para que no quede en la barra
+                cancelScamNotification(sbnKey)
                 val threatType = if (isWhatsApp) com.escudodigital.ui.ThreatInterceptActivity.TYPE_WHATSAPP else com.escudodigital.ui.ThreatInterceptActivity.TYPE_SMS
                 AlertManager.sendAlert(applicationContext, phoneResult, notifId, threatType = threatType)
                 return
@@ -118,6 +123,8 @@ class ScamNotificationListener : NotificationListenerService() {
 
         if (contentResult.isMediumOrHigh) {
             Log.d(TAG, "🚨 ALERTA por contenido sospechoso o URL peligrosa: ${contentResult.level}")
+            // Cancelar inmediatamente la notificación sospechosa de la barra
+            cancelScamNotification(sbnKey)
             val threatType = when {
                 contentResult.signals.any { it.contains("Dominio", ignoreCase = true) } ||
                 contentResult.detectedValue.startsWith("http://") ||
@@ -127,6 +134,7 @@ class ScamNotificationListener : NotificationListenerService() {
                 else -> com.escudodigital.ui.ThreatInterceptActivity.TYPE_SMS
             }
             AlertManager.sendAlert(applicationContext, contentResult, notifId, threatType = threatType)
+            return
         }
 
         // Detectar llamada de WhatsApp (Sección 13 de AGENTS.md)
@@ -136,7 +144,17 @@ class ScamNotificationListener : NotificationListenerService() {
                 signals = listOf("Llamada entrante de WhatsApp de contacto no identificado"),
                 advice = "Tené cuidado si solicita dinero, códigos o información personal."
             )
+            cancelScamNotification(sbnKey)
             AlertManager.sendAlert(applicationContext, callResult, notifId + 1, threatType = com.escudodigital.ui.ThreatInterceptActivity.TYPE_CALL)
+        }
+    }
+
+    fun cancelScamNotification(key: String) {
+        try {
+            cancelNotification(key)
+            Log.d(TAG, "Notificación fraudulenta cancelada y retirada de la barra: $key")
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo cancelar notificación por clave: ${e.message}")
         }
     }
 
@@ -150,6 +168,7 @@ class ScamNotificationListener : NotificationListenerService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) instance = null
         Log.d(TAG, "ScamNotificationListener destruido")
         scope.cancel()
     }
