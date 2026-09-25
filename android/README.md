@@ -77,12 +77,26 @@ Motor Local (LocalRiskEngine)
 5. Crear un AVD (emulador) con **API 31+** desde AVD Manager
 6. Presionar **▶ Run** para instalar en el emulador
 
-### Demo en el Emulador (Hackathon)
-1. Instalar la app y abrir la pantalla principal
-2. El botón **"Probar Alerta de Prueba"** simula una notificación de WhatsApp del número `+5491138901234` (registrado en el seed del backend)
-3. La alerta navega a la pantalla de detalle con las 3 preguntas preventivas
-4. El botón **"Permitir este número"** agrega el contacto a la lista de confianza local (Room)
-5. Para ver el sync en acción: asegurarse de que el backend esté corriendo en `http://10.0.2.2:8000` desde el emulador
+### Demo Automatizada en el Emulador (`test_emulator.sh`)
+
+Para probar el flujo completo en el emulador sin necesidad de interacción manual, ejecutá desde la terminal:
+
+```bash
+# 1. Configurar permisos iniciales del sistema (roles, notificaciones, accesibilidad)
+./test_emulator.sh setup
+
+# 2. Comandos individuales de prueba
+./test_emulator.sh call "+5493704048860"      # Simular llamada sospechosa
+./test_emulator.sh missed "+5491140028899"    # Simular llamada perdida
+./test_emulator.sh sms "+5493517894561" "..." # Simular SMS con phishing
+./test_emulator.sh notif                      # Simular notificación de WhatsApp
+./test_emulator.sh url "http://anses-beneficios-gob-ar.site" # Intercepción en Chrome
+./test_emulator.sh sync                       # Forzar sincronización con el backend
+./test_emulator.sh logs                       # Monitoreo de logs en tiempo real
+
+# 3. Demo Completa Guiada para el Jurado
+./test_emulator.sh demo
+```
 
 ---
 

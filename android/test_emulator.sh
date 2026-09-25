@@ -85,7 +85,7 @@ send_sms() {
 # 2. SIMULAR LLAMADA ENTRANTE
 # ─────────────────────────────────────────────────────────────────────────────
 simulate_call() {
-    local NUMBER="${1:-+5493517894561}"
+    local NUMBER="${1:-+5493704048860}"
     echo ""
     echo "📞 Simulando llamada entrante desde $NUMBER..."
     {
